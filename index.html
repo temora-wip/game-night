@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GAME NIGHT｜ゲーム大会記録</title>
+<style>
+:root{
+  --bg:#24262A; --bg2:#1E1F22; --panel:#F4F4F2; --ink:#1E1F22; --text:#EDEDED; --sub:#A9ADB4; --dim:#6B6E74;
+  --line:#4A4D53; --row:rgba(54,57,62,.92); --dark:rgba(20,21,24,.88);
+  --blue:#2E8FD8; --blue2:#4AA3E6; --gold:#F2C14E; --orange:#E06A2C; --red:#C8463C; --green:#5FD49A;
+  --mono:ui-monospace,"SFMono-Regular",Consolas,"Menlo",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--text);font-family:"Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif;font-size:15px;line-height:1.5}
+.bg{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+#app{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:14px 14px 40px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+input,select{font:inherit}
+.mono{font-family:var(--mono)}
+.cap{font-size:11px;letter-spacing:2px;color:var(--blue);margin:0 0 6px}
+.capg{font-size:11px;letter-spacing:2px;color:#8A8D93;margin:0}
+.muted{color:var(--sub)} .dim{color:var(--dim)}
+.stripe{height:8px;width:110px;background:repeating-linear-gradient(-45deg,var(--gold) 0 6px,transparent 6px 12px)}
+.tag{display:inline-block;background:var(--blue);color:#fff;padding:3px 14px 3px 10px;clip-path:polygon(0 0,100% 0,92% 100%,0 100%);font-size:13px;white-space:nowrap}
+.hd{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin-bottom:14px}
+.hd .l,.hd .r{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ico{font-size:20px;line-height:1;color:var(--sub);padding:4px}
+.ico:hover{color:var(--text)}
+.pill{background:var(--blue);color:#fff;padding:1px 6px;font-size:11px}
+.wp{background:var(--panel);color:var(--ink)}
+.cut{clip-path:polygon(0 0,100% 0,100% 78%,96% 100%,0 100%)}
+.top-o{border-top:3px solid var(--orange)}
+.btn{display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:#fff;padding:9px 18px;clip-path:polygon(0 0,100% 0,100% 70%,94% 100%,0 100%);font-size:15px}
+.btn:hover{background:var(--blue2)}
+.btn.gold{background:var(--gold);color:var(--ink)}
+.btn2{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);color:#C4C7CC;padding:8px 14px;font-size:14px}
+.btn2:hover{border-color:var(--sub);color:var(--text)}
+.btn2.danger{border-color:#7a3b36;color:#F27C7C}
+.field{width:100%;background:var(--dark);border:1px solid var(--line);color:var(--text);padding:9px 10px;outline:none}
+.field:focus{border-color:var(--blue)}
+.err{color:#F27C7C;font-size:13px;margin:6px 0 0;min-height:1em}
+.grid2{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.6fr);gap:16px}
+@media (max-width:760px){.grid2,.linkgrid{grid-template-columns:1fr !important}}
+.tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.tile{text-align:left;padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-end;min-height:72px}
+.tile .t{font-size:24px;font-weight:600;margin:0;line-height:1.2}
+.tile:hover{filter:brightness(1.06)}
+.span2{grid-column:span 2}.span3{grid-column:span 3}.span6{grid-column:span 6}
+@media (max-width:520px){.span2{grid-column:span 3}.tile .t{font-size:20px}}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--row);padding:8px 12px}
+.rowcut{clip-path:polygon(0 0,100% 0,97% 100%,0 100%)}
+.rk{min-width:36px;text-align:center;padding:4px 0;border:1px solid var(--line);font-family:var(--mono);font-size:15px;color:var(--text)}
+.rk.on{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+.rk.x{min-width:56px;font-size:12px;font-family:inherit}
+.rk.x.on{background:#555;color:#fff;border-color:#777}
+.ptile{text-align:left;padding:10px 12px;background:var(--row);border-left:4px solid transparent}
+.ptile.on{background:var(--panel);color:var(--ink);border-left-color:var(--gold)}
+.ptile .n{font-size:18px;font-weight:600;margin:0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:6px 6px;border-top:1px solid #34373C;text-align:left;font-weight:400}
+th{color:#8A8D93;font-size:11px;border-top:0}
+tr.click{cursor:pointer} tr.click:hover td{background:rgba(255,255,255,.04)}
+.bdg{background:var(--red);color:#fff;font-size:10px;padding:0 5px;margin-left:4px}
+.card{padding:10px 12px;background:var(--row);border-top:4px solid var(--line)}
+.card.first{background:var(--panel);color:var(--ink);border-top-color:var(--gold);clip-path:polygon(0 0,100% 0,100% 82%,88% 100%,0 100%)}
+.card .big{font-family:var(--mono);font-size:32px;margin:0;line-height:1.1}
+.bar{height:6px;background:#34373C}.bar>div{height:100%}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--panel);color:var(--ink);padding:8px 16px;z-index:9;border-top:3px solid var(--orange);font-size:14px}
+.banner{background:#3a3220;border-left:3px solid var(--gold);color:#F2E2B4;padding:6px 10px;font-size:12px;margin-bottom:12px}
+.chk{display:flex;align-items:center;gap:8px;cursor:pointer;color:#C4C7CC;font-size:14px}
+.chk input{width:18px;height:18px;accent-color:var(--blue)}
+.list{display:flex;flex-direction:column;gap:4px}
+.you{font-size:10px;background:var(--blue);color:#fff;padding:0 4px;margin-left:6px;vertical-align:2px}
+.spin{display:inline-block;animation:sp .9s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+.flash{animation:fl .12s linear}@keyframes fl{from{opacity:.4}to{opacity:1}}
+</style>
+</head>
+<body>
+<svg class="bg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <polygon points="200,0 380,0 100,800 -80,800" fill="#fff" fill-opacity=".045"/>
+  <polygon points="420,0 480,0 200,800 140,800" fill="#fff" fill-opacity=".035"/>
+  <polygon points="980,0 1060,0 820,800 740,800" fill="#fff" fill-opacity=".025"/>
+  <g stroke="#3E4146" stroke-width="1.2" fill="none">
+    <path d="M0 640 L120 640 L120 500 L260 500 L260 640 L380 640"/>
+    <path d="M50 500 L50 360 L190 360 L190 500"/><path d="M100 360 L120 270 L140 360"/>
+    <line x1="0" y1="690" x2="420" y2="690"/>
+    <path d="M900 800 L900 620 L1040 620 L1040 540 L1200 540"/>
+  </g>
+  <g stroke="#5A5D63" stroke-width="1"><circle cx="330" cy="130" r="9" fill="none"/><line x1="330" y1="110" x2="330" y2="150"/><line x1="310" y1="130" x2="350" y2="130"/></g>
+</svg>
+<div id="app"><p class="muted" style="padding:40px 0">接続中…</p></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script type="module">
+/* =====================================================
+   設定：Firebaseの設定をここに貼り付けます。
+   空のままだと「お試しモード」（この端末のブラウザだけに保存）で動きます。
+   ===================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCR-RL-mwSVuTFxkV4Us8zh0eKksBzjxR0",
+  authDomain: "asobiba-304ad.firebaseapp.com",
+  databaseURL: "https://asobiba-304ad-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "asobiba-304ad",
+  storageBucket: "asobiba-304ad.firebasestorage.app",
+  messagingSenderId: "119688179542",
+  appId: "1:119688179542:web:f3051e5ec10e3ed3a6f0f7"
+};
+const ROOT = "gamenight";          // データベース内の保存場所（遊び場と共用しても混ざらないように分ける）
+const SITE_NAME = "GAME NIGHT";    // サイト名（仮）
+
+/* ---------------- データ保存（Firebase / お試しモード） ---------------- */
+const LOCAL_KEY = "gamenight-local-db";
+const PREF_KEY = "gamenight-pref";
+const Store = {
+  mode: "local", data: null, onChange: () => {},
+  async init() {
+    if (FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL) {
+      const v = "10.12.2";
+      const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${v}/firebase-app.js`);
+      const db = await import(`https://www.gstatic.com/firebasejs/${v}/firebase-database.js`);
+      const app = initializeApp(FIREBASE_CONFIG);
+      this.db = db; this.ref = db.ref(db.getDatabase(app), ROOT); this.mode = "firebase";
+      db.onValue(this.ref, snap => { this.data = snap.val() || {}; this.onChange(); },
+        err => { showFatal("データベースに接続できません：" + err.message); });
+    } else {
+      this.mode = "local";
+      this.data = loadLocal();
+      window.addEventListener("storage", e => { if (e.key === LOCAL_KEY) { this.data = loadLocal(); this.onChange(); } });
+      setTimeout(() => this.onChange(), 0);
+    }
+  },
+  // updates: { "a/b/c": 値 or null(削除) }
+  async update(updates) {
+    if (this.mode === "firebase") return this.db.update(this.ref, updates);
+    const d = structuredClone(this.data);
+    for (const [p, v] of Object.entries(updates)) setPath(d, p, v);
+    this.data = d; localStorage.setItem(LOCAL_KEY, JSON.stringify(d)); this.onChange();
+  }
+};
+function loadLocal() { try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || {}; } catch { return {}; } }
+function setPath(obj, path, val) {
+  const ks = path.split("/"); let o = obj;
+  for (let i = 0; i < ks.length - 1; i++) { if (typeof o[ks[i]] !== "object" || o[ks[i]] === null) o[ks[i]] = {}; o = o[ks[i]]; }
+  const last = ks[ks.length - 1];
+  if (val === null || val === undefined) delete o[last]; else o[last] = val;
+}
+
+/* ---------------- 画面の状態 ---------------- */
+const S = {
+  view: "access", eventId: null, me: null,
+  accessCode: "", accessPick: null, remember: true,
+  setup: null, draft: null, editRound: null, stTab: "rank",
+  viewEventId: null, recMember: null, drawing: null, err: "", pending: false
+};
+const pref = (() => { try { return JSON.parse(localStorage.getItem(PREF_KEY)) || {}; } catch { return {}; } })();
+function savePref() { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); }
+
+/* ---------------- 便利関数 ---------------- */
+const D = () => Store.data || {};
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const pad2 = n => String(n).padStart(2, "0");
+const fmtDate = t => { if (!t) return "-"; const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()}`; };
+const fmtDateTime = t => { const d = new Date(t); return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+const mname = id => D().members?.[id]?.name ?? "（削除済み）";
+const evOf = id => D().events?.[id];
+const curEv = () => evOf(S.eventId);
+const playersOf = e => Object.entries(e?.players || {}).sort((a, b) => a[1] - b[1]).map(([id]) => id);
+const roundsOf = e => Object.entries(e?.rounds || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => a.at - b.at);
+const gamesList = () => Object.entries(D().games || {}).map(([id, g]) => ({ id, ...g })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, "ja"));
+const membersList = () => Object.entries(D().members || {}).map(([id, m]) => ({ id, ...m })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+const multBadge = m => (m && m > 1) ? `<span class="bdg">×${m}</span>` : "";
+
+// 1ゲームの得点：参加人数Nのとき 順位r → (N - r + 1) × 倍率。同じ順位は同じ点。
+function roundPoints(r) {
+  const ent = Object.entries(r.ranks || {}).filter(([, v]) => v > 0);
+  const n = ent.length, m = r.mult || 1, out = {};
+  for (const [id, rk] of ent) out[id] = Math.max(0, n - rk + 1) * m;
+  return out;
+}
+function standingsOf(e, rs) {
+  const ps = playersOf(e), t = {}; ps.forEach(p => t[p] = 0);
+  rs.forEach(r => { const p = roundPoints(r); for (const k in p) if (k in t) t[k] += p[k]; });
+  const arr = ps.map(id => ({ id, pts: t[id] })).sort((a, b) => b.pts - a.pts);
+  arr.forEach((x, i) => x.rank = (i > 0 && x.pts === arr[i - 1].pts) ? arr[i - 1].rank : i + 1);
+  return arr;
+}
+function withMoves(e) {
+  const rs = roundsOf(e), now = standingsOf(e, rs);
+  if (rs.length < 2) return now.map(x => ({ ...x, move: 0 }));
+  const prev = Object.fromEntries(standingsOf(e, rs.slice(0, -1)).map(x => [x.id, x.rank]));
+  return now.map(x => ({ ...x, move: prev[x.id] - x.rank }));
+}
+function remainingPool(e) {
+  const played = new Set(roundsOf(e).map(r => r.gameId));
+  return Object.keys(e?.pool || {}).filter(g => D().games?.[g] && !played.has(g));
+}
+const poolSize = e => Object.keys(e?.pool || {}).filter(g => D().games?.[g]).length + roundsOf(e).filter(r => !e.pool?.[r.gameId] || !D().games?.[r.gameId]).length;
+
+/* ---------------- 描画 ---------------- */
+const app = document.getElementById("app");
+let renderQueued = false;
+function render(force) {
+  const a = document.activeElement;
+  if (!force && a && app.contains(a) && (a.tagName === "INPUT" || a.tagName === "SELECT") && a.type !== "checkbox") { renderQueued = true; return; }
+  renderQueued = false;
+  if (!Store.data) return;
+  if (D().config?.closed) { app.innerHTML = viewClosed(); return; }
+  // 入室中の大会が終了・削除されたら入室画面へ
+  if (S.eventId && (!curEv() || curEv().status === "done") && !["archive", "record", "standings"].includes(S.view)) {
+    S.eventId = null; S.view = "access";
+  }
+  const v = { access: viewAccess, setup: viewSetup, menu: viewMenu, draw: viewDraw, result: viewResult,
+    standings: viewStandings, games: viewGames, archive: viewArchive, record: viewRecord, link: viewLink }[S.view] || viewAccess;
+  app.innerHTML = (Store.mode === "local" ? `<div class="banner">お試しモード：データはこの端末のブラウザだけに保存されます（Firebaseの設定を入れると全員で共有できます）</div>` : "") + v();
+  afterRender();
+}
+document.addEventListener("focusout", () => setTimeout(() => { if (renderQueued) render(); }, 0));
+
+function header(tagText, back = "menu") {
+  const e = curEv();
+  const prog = e ? `<span><span class="pill">GAME</span> <span class="mono" style="color:var(--text);font-size:15px">${pad2(roundsOf(e).length)}/${pad2(poolSize(e))}</span></span>` : "";
+  return `<div class="hd"><div class="l">
+      ${back ? `<button class="ico" data-act="go" data-v="${back}" aria-label="戻る">←</button>` : ""}
+      <span class="tag">${tagText}</span>
+      ${e ? `<span class="mono dim">ROOM ${esc(e.code)}</span>` : ""}
+    </div><div class="r">
+      ${prog}
+      <span class="mono dim">SYS.${fmtDateTime(Date.now())}</span>
+      ${e ? `<button class="ico" data-act="go" data-v="link" title="別の端末で入る" aria-label="別の端末で入る">▦</button>
+             <button class="ico" data-act="logout" title="退室" aria-label="退室">⏻</button>` : ""}
+    </div></div>`;
+}
+
+/* ----- 入室 ----- */
+function viewAccess() {
+  const code = S.accessCode.toUpperCase();
+  const eid = D().codes?.[code]; const e = eid && evOf(eid);
+  const active = Object.entries(D().events || {}).filter(([, x]) => x.status !== "done");
+  let info = "";
+  if (code.length >= 4) {
+    info = e ? `<div style="margin-top:12px;border-left:3px solid var(--blue);background:var(--dark);padding:8px 12px">
+        <p class="cap" style="margin:0">EVENT FOUND</p>
+        <p style="margin:2px 0 0;font-size:16px">${esc(e.title)}　<span class="mono">${roundsOf(e).length} / ${poolSize(e)}</span> ゲーム</p>
+        <p class="muted" style="margin:0;font-size:13px">開始 ${fmtDate(e.startedAt)}　最終更新 ${fmtDate(e.updatedAt)}</p></div>`
+      : `<p class="err">この部屋コードの大会は見つかりません</p>`;
+  }
+  const tiles = e ? playersOf(e).map(id => `<button class="ptile ${S.accessPick === id ? "on" : ""}" data-act="pick" data-id="${id}">
+        <p class="mono capg" style="font-size:10px">ID-${esc(id.slice(-3).toUpperCase())}</p><p class="n">${esc(mname(id))}</p></button>`).join("") : "";
+  return `${header("入室 / ACCESS", null)}
+  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)">
+    <div>
+      <div class="stripe"></div>
+      <p class="cap" style="margin-top:12px">STEP 1　ROOM CODE</p>
+      <div class="wp top-o cut" style="padding:10px 14px">
+        <input id="codeInput" class="mono" maxlength="6" autocomplete="off" placeholder="AB12" value="${esc(code)}"
+          style="width:100%;border:0;background:transparent;font-size:32px;letter-spacing:8px;outline:none;color:var(--ink);text-transform:uppercase">
+      </div>
+      ${info}
+      <div style="margin-top:22px">
+        <p class="cap">NEW EVENT</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn2" data-act="newEvent">＋ 新しい大会を作る</button><button class="btn2" data-act="go" data-v="archive">記録</button><button class="btn2" data-act="go" data-v="record">通算</button></div>
+        ${active.length ? `<p class="muted" style="font-size:12px;margin:10px 0 0">開催中：${active.map(([, x]) => `<button class="mono" style="text-decoration:underline" data-act="setCode" data-code="${esc(x.code)}">${esc(x.code)}</button> ${esc(x.title)}`).join("　")}</p>` : ""}
+      </div>
+    </div>
+    <div>
+      <p class="cap">STEP 2　SELECT PLAYER</p>
+      ${e ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${tiles}</div>
+        <label class="chk" style="margin-top:12px"><input type="checkbox" data-chg="remember" ${S.remember ? "checked" : ""}> この端末で次回から自動で入室する</label>
+        <div style="margin-top:12px"><button class="btn" data-act="enter">入室 / ENTER</button></div>
+        <p class="err">${esc(S.err)}</p>`
+      : `<div class="row" style="color:var(--sub)">部屋コードを入れると、参加者の名前が表示されます</div>`}
+    </div>
+  </div>`;
+}
+
+/* ----- 大会を作る ----- */
+function viewSetup() {
+  const st = S.setup, ms = membersList(), gs = gamesList();
+  return `${header("新しい大会 / NEW EVENT", "access")}
+  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+    <div>
+      <p class="cap">EVENT TITLE</p>
+      <input class="field" id="setupTitle" value="${esc(st.title)}">
+      <p class="cap" style="margin-top:16px">PLAYERS（2〜6人を選択）</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        ${ms.map(m => `<button class="ptile ${st.players.includes(m.id) ? "on" : ""}" data-act="setupPlayer" data-id="${m.id}"><p class="n" style="font-size:16px">${esc(m.name)}</p></button>`).join("") || `<p class="muted">まだメンバーがいません</p>`}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px"><input class="field" id="newMember" placeholder="名前を追加（例：たろう）"><button class="btn2" data-act="addMemberSetup">追加</button></div>
+    </div>
+    <div>
+      <p class="cap">GAME POOL（抽選に入れるゲーム）</p>
+      <div class="list" style="max-height:420px;overflow:auto">
+        ${gs.map(g => `<label class="chk row" style="padding:6px 10px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-chg="setupGame" data-id="${g.id}" ${st.games.includes(g.id) ? "checked" : ""}>${esc(g.name)}${multBadge(g.mult)}${g.isFree ? '<span class="dim" style="font-size:12px">（自由枠）</span>' : ""}</span></label>`).join("") || `<p class="muted">ゲーム候補がまだありません。</p><button class="btn2" data-act="seed">前回のExcelの17ゲームを登録する</button>`}
+      </div>
+      <p class="muted" style="font-size:12px">選択中 ${st.games.length} ゲーム</p>
+    </div>
+  </div>
+  <div style="margin-top:18px"><button class="btn gold" data-act="createEvent">大会を作成して部屋コードを発行</button><p class="err">${esc(S.err)}</p></div>`;
+}
+
+/* ----- メニュー ----- */
+function viewMenu() {
+  const e = curEv(); const st = withMoves(e); const rs = roundsOf(e); const last = rs[rs.length - 1];
+  const leaders = st.filter(x => x.rank === 1);
+  const total = poolSize(e) || 1; const ratio = Math.min(1, rs.length / total);
+  const circ = 2 * Math.PI * 36;
+  const second = st.find(x => x.rank > 1);
+  const cur = e.current;
+  let latest = "まだ結果がありません";
+  if (last) { const p = roundPoints(last); const best = Math.max(...Object.values(p)); const w = Object.keys(p).filter(k => p[k] === best).map(mname).join("・"); latest = `${esc(last.name)}　${esc(w)}が1位`; }
+  return `${header(`<span class="mono">${esc(SITE_NAME)}</span>`, null)}
+  <div class="grid2">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="stripe"></div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <svg width="92" height="92" viewBox="0 0 86 86" aria-hidden="true"><circle cx="43" cy="43" r="36" stroke="#3A3D42" stroke-width="6" fill="none"/>
+          <circle cx="43" cy="43" r="36" stroke="#F2C14E" stroke-width="6" fill="none" stroke-dasharray="${(circ * ratio).toFixed(1)} ${circ.toFixed(1)}" transform="rotate(-90 43 43)"/>
+          <text x="43" y="49" text-anchor="middle" font-size="30" fill="#EDEDED">1</text><text x="43" y="64" text-anchor="middle" font-size="9" fill="#A9ADB4">RANK</text></svg>
+        <div>
+          <p class="mono dim" style="margin:0;font-size:11px">${esc(e.title)} / LEADER</p>
+          <p style="font-size:21px;font-weight:600;margin:0">${leaders.map(x => esc(mname(x.id)) + (x.id === S.me ? '<span class="you">YOU</span>' : "")).join("・")}</p>
+          <p class="muted" style="margin:0"><span class="mono" style="color:var(--text);font-size:18px">${leaders[0]?.pts ?? 0}</span> pt${second ? `　｜　2位と ${leaders[0].pts - second.pts} 点差` : ""}</p>
+        </div>
+      </div>
+      <div style="background:var(--dark);border-left:3px solid var(--blue);padding:8px 12px">
+        <p class="cap" style="margin:0">LATEST REPORT</p><p style="margin:2px 0 0">${latest}</p>
+      </div>
+      <div class="list">
+        ${st.filter(x => x.rank > 1).map(x => `<div class="row rowcut"><span><span class="mono dim">${pad2(x.rank)}</span>　${esc(mname(x.id))}${x.id === S.me ? '<span class="you">YOU</span>' : ""}</span><span class="mono" style="margin-right:12px">${x.pts}</span></div>`).join("")}
+      </div>
+    </div>
+    <div class="tiles">
+      <button class="span6 wp cut top-o" data-act="go" data-v="draw" style="text-align:left;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+        <div><p class="capg">NEXT OPERATION</p>
+          <p style="font-size:26px;font-weight:600;margin:0">${cur ? (cur.name ? esc(cur.name) : "自由枠（ゲーム選択待ち）") : "未抽選"}</p>
+          ${cur ? `<span style="background:var(--ink);color:var(--panel);font-size:12px;padding:1px 8px">倍率 ×${cur.mult || 1}</span>` : `<span class="dim" style="font-size:13px">タップして抽選</span>`}</div>
+        <div style="text-align:right"><p class="mono" style="font-size:44px;margin:0;line-height:1">${pad2(rs.length + 1)}</p><p class="dim" style="font-size:12px;margin:0">/ ${pad2(total)}</p></div>
+      </button>
+      <button class="tile wp span3" data-act="go" data-v="draw"><div><p class="t">抽選</p><p class="capg">DRAW</p></div><span style="font-size:26px;color:#C9CACC">⚄</span></button>
+      <button class="tile wp span3" data-act="openResult"><div><p class="t">結果入力</p><p class="capg">RESULT</p></div><span style="font-size:26px;color:#C9CACC">✎</span></button>
+      <button class="span6" data-act="go" data-v="standings" style="display:grid;grid-template-columns:1fr 1.5fr;text-align:left">
+        <div style="background:var(--blue);color:#fff;padding:14px;clip-path:polygon(0 0,100% 0,100% 100%,6% 100%,0 80%)"><span style="font-size:24px;font-weight:600">集計</span></div>
+        <div style="display:flex;flex-direction:column">
+          <div style="background:var(--bg2);font-size:12px;padding:3px 10px;letter-spacing:2px">STANDINGS</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;flex:1">
+            <div style="background:var(--blue2);color:#fff;padding:8px 10px;font-size:16px;border-right:1px solid var(--blue)">今日の順位</div>
+            <div style="background:var(--blue2);color:#fff;padding:8px 10px;font-size:16px">ゲーム別</div></div></div>
+      </button>
+      <button class="tile wp span2 top-o" data-act="go" data-v="games"><div><p class="t" style="font-size:20px">候補</p><p class="capg">GAMES</p></div></button>
+      <button class="tile wp span2" data-act="go" data-v="archive"><div><p class="t" style="font-size:20px">記録</p><p class="capg">ARCHIVE</p></div></button>
+      <button class="tile span2" data-act="go" data-v="record" style="background:var(--bg2);border:1px solid var(--line)"><div><p class="t" style="font-size:20px">通算</p><p class="capg">RECORD</p></div></button>
+    </div>
+  </div>`;
+}
+
+/* ----- 抽選 ----- */
+function viewDraw() {
+  const e = curEv(); const cur = e.current; const rem = remainingPool(e);
+  const played = new Set(roundsOf(e).map(r => r.gameId));
+  const shown = S.drawing ? { name: S.drawing, mult: null } : cur;
+  let free = "";
+  if (cur && cur.isFree && !cur.name && !S.drawing) {
+    const st = standingsOf(e, roundsOf(e)); const lastRank = Math.max(...st.map(x => x.rank));
+    const choosers = st.filter(x => x.rank === lastRank).map(x => mname(x.id)).join("・");
+    free = `<div style="margin-top:12px;background:var(--dark);border-left:3px solid var(--red);padding:10px 12px">
+      <p class="cap" style="color:#F27C7C;margin:0">FREE SLOT</p>
+      <p style="margin:2px 0 8px">選ぶ人：<b>${esc(choosers)}</b>（現在最下位）</p>
+      <div style="display:flex;gap:6px"><input class="field" id="freeName" placeholder="遊ぶゲーム名を入力"><button class="btn2" data-act="setFree">決定</button></div></div>`;
+  }
+  const poolIds = gamesList().filter(g => e.pool?.[g.id]);
+  return `${header("抽選 / DRAW")}
+  <div class="grid2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
+    <div>
+      <div class="stripe"></div>
+      <div class="wp cut top-o ${S.drawing ? "flash" : ""}" style="margin-top:8px;padding:18px 18px 16px">
+        <p class="capg">${S.drawing ? "SCANNING…" : cur ? "TARGET LOCKED" : "STANDBY"}</p>
+        <p style="font-size:32px;font-weight:600;margin:4px 0">${shown ? (shown.name ? esc(shown.name) : "自由枠") : "―"}</p>
+        ${cur && !S.drawing ? `<span style="background:var(--ink);color:var(--panel);font-size:12px;padding:2px 8px">倍率 ×${cur.mult || 1}</span>` : ""}
+      </div>
+      ${free}
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        ${!cur ? `<button class="btn" data-act="draw" ${S.drawing ? "disabled" : ""}>⚄ 抽選する</button>`
+          : `<button class="btn" data-act="openResult">✓ このゲームで開始 → 結果入力</button><button class="btn2" data-act="draw">↻ 引き直す</button><button class="btn2" data-act="clearCur">取り消す</button>`}
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:8px">残り ${rem.length} ゲームからランダムに選びます（同じゲームは出ません）</p>
+      <p class="err">${esc(S.err)}</p>
+    </div>
+    <div>
+      <p class="cap">CANDIDATE LIST</p>
+      <div class="list" style="font-size:14px">
+        ${poolIds.map(g => {
+          const isCur = cur && cur.gameId === g.id, done = played.has(g.id);
+          return `<div class="row" style="${isCur ? "background:var(--panel);color:var(--ink);border-left:3px solid var(--orange)" : done ? "background:transparent;color:var(--dim);text-decoration:line-through" : ""};padding:5px 10px">
+            <span>${esc(g.name)}${done ? "（済）" : ""}</span><span>${g.mult > 1 ? `<span style="color:${isCur ? "var(--red)" : "#F27C7C"}">×${g.mult}</span>` : ""}</span></div>`;
+        }).join("") || `<p class="muted">抽選に入っているゲームがありません。「候補」で追加してください</p>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ----- 結果入力 ----- */
+function viewResult() {
+  const e = curEv(); const ps = playersOf(e);
+  let target;
+  if (S.editRound) target = e.rounds?.[S.editRound];
+  else target = e.current;
+  if (!target || !target.name) {
+    return `${header("結果入力 / RESULT")}<div class="row">先に「抽選」で次のゲームを決めてください${target && target.isFree ? "（自由枠のゲーム名が未入力です）" : ""}</div>
+      <div style="margin-top:12px"><button class="btn" data-act="go" data-v="draw">抽選へ</button></div>`;
+  }
+  const n = ps.length; const dr = S.draft || {};
+  const parts = Object.values(dr).filter(v => v > 0).length;
+  const prev = roundPoints({ ranks: Object.fromEntries(Object.entries(dr).filter(([, v]) => v > 0)), mult: target.mult });
+  return `${header(S.editRound ? "結果の修正 / EDIT" : "結果入力 / RESULT", S.editRound ? "standings" : "menu")}
+  <p class="mono dim" style="margin:-6px 0 12px">OP ${esc(target.name)} ×${target.mult || 1}</p>
+  <div class="grid2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
+    <div class="list" style="gap:6px">
+      ${ps.map(id => `<div class="row rowcut" style="flex-wrap:wrap"><span><span class="mono dim" style="font-size:11px">ID-${esc(id.slice(-3).toUpperCase())}</span>　${esc(mname(id))}${id === S.me ? '<span class="you">YOU</span>' : ""}</span>
+        <span style="display:flex;gap:4px;margin-right:10px">${Array.from({ length: n }, (_, i) => `<button class="rk ${dr[id] === i + 1 ? "on" : ""}" data-act="rank" data-id="${id}" data-r="${i + 1}">${i + 1}</button>`).join("")}
+        <button class="rk x ${dr[id] === 0 ? "on" : ""}" data-act="rank" data-id="${id}" data-r="0">不参加</button></span></div>`).join("")}
+      <p class="muted" style="font-size:12px;margin:4px 0 0">同じ順位は重ねて選べます。抜けた人は「不参加」にすると、残りの人数で点数を計算します。</p>
+    </div>
+    <div>
+      <div class="wp top-o" style="padding:12px 14px">
+        <p class="capg">SCORE PREVIEW（${parts}人参加）</p>
+        <div class="mono" style="font-size:15px;line-height:1.9;margin-top:4px">
+          ${ps.filter(id => dr[id] > 0).sort((a, b) => prev[b] - prev[a]).map(id => `<div>${esc(mname(id))}<span style="float:right">+${prev[id]}</span></div>`).join("") || `<span style="color:#8A8D93">順位を選ぶと表示されます</span>`}
+        </div>
+      </div>
+      <button class="btn" data-act="submitResult" style="margin-top:10px;width:100%;justify-content:center">${S.editRound ? "修正を保存" : "確定 / SUBMIT"}</button>
+      ${S.editRound ? `<button class="btn2 danger" data-act="deleteRound" style="margin-top:8px;width:100%;justify-content:center">この結果を削除</button>` : ""}
+      <p class="err">${esc(S.err)}</p>
+    </div>
+  </div>`;
+}
+
+/* ----- 集計 ----- */
+function viewStandings() {
+  const id = S.viewEventId || S.eventId; const e = evOf(id);
+  if (!e) return `${header("集計 / STANDINGS")}<p>大会が見つかりません</p>`;
+  const ro = id !== S.eventId || e.status === "done";
+  const st = withMoves(e); const rs = roundsOf(e); const ps = playersOf(e);
+  const back = S.viewEventId ? "archive" : "menu";
+  const tabs = `<span style="display:flex;gap:6px">
+     <button class="${S.stTab === "rank" ? "wp" : "btn2"}" style="padding:3px 12px" data-act="stTab" data-t="rank">今日の順位</button>
+     <button class="${S.stTab === "game" ? "wp" : "btn2"}" style="padding:3px 12px" data-act="stTab" data-t="game">ゲーム別</button></span>`;
+  const cards = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">
+    ${st.map(x => `<div class="card ${x.rank === 1 ? "first" : ""}" style="${x.rank === 2 ? "border-top-color:#8DA2C0" : ""}">
+      <p class="mono" style="font-size:11px;color:#8A8D93;margin:0">RANK ${pad2(x.rank)} ${x.move > 0 ? `<span style="color:var(--green)">▲${x.move}</span>` : x.move < 0 ? `<span style="color:#F27C7C">▼${-x.move}</span>` : ""}</p>
+      <p style="font-size:16px;margin:2px 0">${esc(mname(x.id))}${x.id === S.me ? '<span class="you">YOU</span>' : ""}</p><p class="big">${x.pts}</p></div>`).join("")}</div>`;
+  const list = S.stTab === "rank" ? [...rs].reverse().slice(0, 3) : [...rs].reverse();
+  const rows = list.map((r, i) => {
+    const p = roundPoints(r); const best = Math.max(0, ...Object.values(p));
+    return `<tr class="${ro ? "" : "click"}" ${ro ? "" : `data-act="editRound" data-id="${r.id}"`}><td class="mono dim">${pad2(rs.length - i)}</td><td>${esc(r.name)}${multBadge(r.mult)}</td>
+      ${ps.map(pid => `<td class="mono" style="${p[pid] === best && best > 0 ? "color:var(--gold)" : ""}">${r.ranks?.[pid] > 0 ? p[pid] : '<span class="dim">-</span>'}</td>`).join("")}</tr>`;
+  }).join("");
+  const table = `<p class="cap" style="margin-top:16px">${S.stTab === "rank" ? "LATEST 3" : "OPERATION LOG"}${ro ? "" : '<span class="dim" style="letter-spacing:0">　行をタップで修正</span>'}</p>
+    <div style="overflow-x:auto"><table><tr><th style="width:42px">#</th><th>ゲーム</th>${ps.map(pid => `<th>${esc(mname(pid))}</th>`).join("")}</tr>${rows || `<tr><td colspan="${ps.length + 2}" class="muted">まだ結果がありません</td></tr>`}
+    ${S.stTab === "game" ? `<tr><td></td><td style="color:#8A8D93">合計</td>${ps.map(pid => `<td class="mono" style="font-size:16px">${st.find(x => x.id === pid)?.pts ?? 0}</td>`).join("")}</tr>` : ""}</table></div>`;
+  return `${header(ro ? `記録 / ${esc(e.title)}` : "集計 / STANDINGS", back)}
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">${tabs}
+    ${!ro ? `<button class="btn2 danger" data-act="finishEvent">大会を終了する</button>` : `<span class="muted" style="font-size:13px">${fmtDate(e.startedAt)}〜${fmtDate(e.endedAt || e.updatedAt)}　${e.status === "done" ? "終了" : "開催中"}</span>`}</div>
+  ${S.stTab === "rank" ? cards : ""}${table}`;
+}
+
+/* ----- 候補（ゲーム・メンバー） ----- */
+function viewGames() {
+  const e = curEv(); const played = new Set(roundsOf(e).map(r => r.gameId));
+  return `${header("候補 / GAMES")}
+  <div class="grid2" style="grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)">
+    <div>
+      <p class="cap">GAME LIST（チェック＝この大会の抽選に入れる）</p>
+      <div class="list">
+      ${gamesList().map(g => `<div class="row" style="padding:6px 10px;flex-wrap:wrap">
+        <label class="chk"><input type="checkbox" data-chg="poolToggle" data-id="${g.id}" ${e.pool?.[g.id] ? "checked" : ""} ${played.has(g.id) ? "disabled" : ""}>${esc(g.name)}${g.isFree ? '<span class="dim" style="font-size:12px">（自由枠）</span>' : ""}${played.has(g.id) ? '<span class="dim" style="font-size:12px">（済）</span>' : ""}</label>
+        <span style="display:flex;gap:6px;align-items:center">
+          <select class="field" style="width:auto;padding:4px 6px" data-chg="mult" data-id="${g.id}">${[1, 2, 3].map(m => `<option value="${m}" ${(g.mult || 1) === m ? "selected" : ""}>×${m}</option>`).join("")}</select>
+          <button class="btn2" style="padding:4px 8px;font-size:12px" data-act="delGame" data-id="${g.id}">削除</button></span></div>`).join("") || `<p class="muted">まだゲームがありません</p>`}
+      </div>
+      <p class="cap" style="margin-top:14px">ADD GAME</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input class="field" id="gName" placeholder="ゲーム名（例：ニムト）" style="flex:1;min-width:160px">
+        <select class="field" id="gMult" style="width:auto"><option value="1">×1</option><option value="2">×2</option><option value="3">×3</option></select>
+        <label class="chk"><input type="checkbox" id="gFree">自由枠</label>
+        <button class="btn2" data-act="addGame">追加</button></div>
+      <p class="err">${esc(S.err)}</p>
+    </div>
+    <div>
+      <p class="cap">MEMBER LIST（メンバー名簿）</p>
+      <div class="list">
+        ${membersList().map(m => `<div class="row" style="padding:6px 10px"><input class="field" style="background:transparent;border-color:transparent;padding:2px 4px" value="${esc(m.name)}" data-chg="renameMember" data-id="${m.id}"><span class="dim" style="font-size:11px">名前を直接修正</span></div>`).join("")}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px"><input class="field" id="newMember2" placeholder="名前を追加"><button class="btn2" data-act="addMember">追加</button></div>
+      <p class="muted" style="font-size:12px">新しいメンバーは次の大会から参加者に選べます。</p>
+    </div>
+  </div>`;
+}
+
+/* ----- 記録（過去の大会） ----- */
+function viewArchive() {
+  const evs = Object.entries(D().events || {}).sort((a, b) => b[1].startedAt - a[1].startedAt);
+  return `${header("記録 / ARCHIVE", S.eventId ? "menu" : "access")}
+  <div class="list">
+  ${evs.map(([id, e]) => {
+    const st = standingsOf(e, roundsOf(e)); const w = st.filter(x => x.rank === 1 && x.pts > 0).map(x => mname(x.id)).join("・");
+    return `<button class="row rowcut" style="text-align:left;padding:10px 14px" data-act="openEvent" data-id="${id}">
+      <span><span class="mono dim" style="font-size:12px">${fmtDate(e.startedAt)}</span>　<b>${esc(e.title)}</b>　<span class="muted" style="font-size:13px">${roundsOf(e).length}ゲーム</span></span>
+      <span style="font-size:13px">${e.status === "done" ? `<span style="color:var(--gold)">優勝 ${esc(w || "-")}</span>` : `<span style="color:var(--blue2)">開催中 ROOM ${esc(e.code)}</span>`}</span></button>`;
+  }).join("") || `<p class="muted">まだ大会の記録がありません</p>`}
+  </div>`;
+}
+
+/* ----- 通算 ----- */
+function rankLetter(v) { return v >= .8 ? "S" : v >= .6 ? "A" : v >= .4 ? "B" : v >= .2 ? "C" : "D"; }
+function viewRecord() {
+  const evs = Object.values(D().events || {}); const ms = membersList();
+  const stat = {}; ms.forEach(m => stat[m.id] = { ev: 0, win: 0, sum: 0, games: {} });
+  for (const e of evs) {
+    const rs = roundsOf(e);
+    if (e.status === "done") {
+      for (const x of standingsOf(e, rs)) { if (!stat[x.id]) continue; stat[x.id].ev++; stat[x.id].sum += x.pts; if (x.rank === 1 && x.pts > 0) stat[x.id].win++; }
+    }
+    for (const r of rs) {
+      const ent = Object.entries(r.ranks || {}).filter(([, v]) => v > 0); const n = ent.length; if (n < 2) continue;
+      for (const [id, rk] of ent) { if (!stat[id]) continue; const g = stat[id].games[r.name] ||= { n: 0, s: 0 }; g.n++; g.s += (n - rk) / (n - 1); }
+    }
+  }
+  const order = ms.filter(m => stat[m.id]).sort((a, b) => stat[b.id].win - stat[a.id].win || (stat[b.id].ev ? stat[b.id].sum / stat[b.id].ev : 0) - (stat[a.id].ev ? stat[a.id].sum / stat[a.id].ev : 0));
+  const sel = S.recMember && stat[S.recMember] ? S.recMember : (S.me && stat[S.me] ? S.me : order[0]?.id);
+  const apt = sel ? Object.entries(stat[sel].games).map(([name, g]) => ({ name, n: g.n, v: g.s / g.n })).sort((a, b) => b.v - a.v) : [];
+  const col = v => v >= .8 ? "var(--gold)" : v >= .4 ? "var(--blue)" : "var(--red)";
+  const doneCount = evs.filter(e => e.status === "done").length;
+  return `${header("通算 / RECORD", S.eventId ? "menu" : "access")}
+  <p class="mono dim" style="margin:-6px 0 12px">TOTAL ${doneCount} EVENTS（終了した大会のみ集計）</p>
+  <div class="grid2" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)">
+    <div>
+      <p class="cap">PLAYER STATUS（タップで得意・不得意を表示）</p>
+      <div class="list">
+        ${order.map((m, i) => { const s = stat[m.id]; const on = m.id === sel;
+          return `<button class="${on ? "wp" : "row"}" data-act="recSel" data-id="${m.id}" style="display:grid;grid-template-columns:1fr auto auto auto;gap:12px;padding:8px 12px;text-align:left;${on ? "border-left:4px solid var(--gold)" : ""}">
+            <span>${esc(m.name)}${m.id === S.me ? '<span class="you">YOU</span>' : ""}</span><span class="mono">参加 ${s.ev}</span><span class="mono">優勝 ${s.win}</span><span class="mono">平均 ${s.ev ? Math.round(s.sum / s.ev) : "-"}</span></button>`; }).join("") || `<p class="muted">メンバーがいません</p>`}
+      </div>
+    </div>
+    <div>
+      <p class="cap">${esc(sel ? mname(sel) : "")} / GAME APTITUDE</p>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:14px">
+        ${apt.map(a => `<div><div style="display:flex;justify-content:space-between"><span>${esc(a.name)} <span class="dim" style="font-size:11px">${a.n}回</span></span><span class="mono" style="color:${col(a.v)}">${rankLetter(a.v)}</span></div>
+          <div class="bar"><div style="width:${Math.max(4, Math.round(a.v * 100))}%;background:${col(a.v)}"></div></div></div>`).join("") || `<p class="muted">まだデータがありません</p>`}
+      </div>
+      <p class="muted" style="font-size:11px;margin-top:10px">ランクは平均順位で決めます（1位=100%、最下位=0%の平均。S 80%以上／A 60%／B 40%／C 20%／D それ未満）</p>
+    </div>
+  </div>`;
+}
+
+/* ----- 別の端末で入る ----- */
+function joinUrl(code) { return location.origin + location.pathname + "?room=" + encodeURIComponent(code); }
+function viewLink() {
+  const e = curEv(); const url = joinUrl(e.code);
+  return `${header("別の端末で入る / LINK")}
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;align-items:center" class="linkgrid">
+    <div class="wp top-o" style="padding:12px;text-align:center"><div id="qr" style="width:180px;height:180px;display:flex;align-items:center;justify-content:center;color:#8A8D93;font-size:12px">QRを準備中…</div>
+      <p class="capg" style="margin-top:4px">SCAN TO JOIN</p></div>
+    <div>
+      <div class="stripe"></div>
+      <p class="cap" style="margin-top:10px">ACCESS LINK</p>
+      <div style="display:flex;gap:6px"><input class="field mono" readonly value="${esc(url)}" id="joinUrl"><button class="btn" data-act="copyUrl">コピー</button></div>
+      <p class="muted" style="font-size:13px;margin-top:10px">スマホのカメラでQRを読むか、リンクをDiscordに貼ってください。開いたら名前を選ぶだけで入室できます。</p>
+      <p class="mono dim" style="font-size:12px">ROOM ${esc(e.code)}　｜　${esc(e.title)}</p>
+    </div>
+  </div>`;
+}
+
+function viewClosed() {
+  return `<div style="padding:80px 0;text-align:center"><div class="stripe" style="margin:0 auto 16px"></div>
+    <p class="cap">SYSTEM OFFLINE</p><p style="font-size:26px;font-weight:600;margin:0">現在サイトは停止中です</p>
+    <p class="muted">管理者が再開するまでお待ちください</p></div>`;
+}
+function showFatal(msg) { app.innerHTML = `<div class="row" style="margin-top:40px;color:#F27C7C">${esc(msg)}</div>`; }
+
+function afterRender() {
+  if (S.view === "link") {
+    const box = document.getElementById("qr"); const e = curEv();
+    if (box && e && window.qrcode) {
+      const q = qrcode(0, "M"); q.addData(joinUrl(e.code)); q.make();
+      box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+      const svg = box.querySelector("svg"); if (svg) { svg.setAttribute("width", "180"); svg.setAttribute("height", "180"); }
+    } else if (box) box.textContent = "QRを表示できません（リンクを使ってください）";
+  }
+  const ci = document.getElementById("codeInput");
+  if (ci && S.view === "access" && !S._codeFocused) { /* 初回はフォーカスしない（スマホで勝手にキーボードが出ないように） */ }
+}
+
+/* ---------------- 操作 ---------------- */
+let toastT;
+function toast(msg) { let t = document.querySelector(".toast"); if (!t) { t = document.createElement("div"); t.className = "toast"; document.body.appendChild(t); } t.textContent = msg; clearTimeout(toastT); toastT = setTimeout(() => t.remove(), 2200); }
+function go(v) { S.view = v; S.err = ""; window.scrollTo(0, 0); render(true); }
+const now = () => Date.now();
+function touch(e) { return { [`events/${S.eventId}/updatedAt`]: now() }; }
+
+function newCode() {
+  const cs = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let c;
+  do { c = Array.from({ length: 4 }, () => cs[Math.floor(Math.random() * cs.length)]).join(""); } while (D().codes?.[c]);
+  return c;
+}
+
+const actions = {
+  go: d => { if (d.v === "standings") { S.viewEventId = null; } go(d.v); },
+  logout: () => { if (!confirm("退室しますか？（記録は消えません）")) return; delete pref.code; delete pref.member; savePref(); S.eventId = null; S.me = null; S.accessCode = ""; S.accessPick = null; go("access"); },
+  setCode: d => { S.accessCode = d.code; S.accessPick = null; render(true); },
+  pick: d => { S.accessPick = d.id; S.err = ""; render(true); },
+  enter: () => {
+    const eid = D().codes?.[S.accessCode.toUpperCase()];
+    if (!eid) { S.err = "部屋コードを確認してください"; return render(true); }
+    if (!S.accessPick) { S.err = "自分の名前を選んでください"; return render(true); }
+    S.eventId = eid; S.me = S.accessPick;
+    if (S.remember) { pref.code = S.accessCode.toUpperCase(); pref.member = S.me; savePref(); }
+    history.replaceState(null, "", location.pathname);
+    go("menu");
+  },
+  newEvent: () => {
+    const n = Object.keys(D().events || {}).length + 1;
+    S.setup = { title: `第${n}回大会`, players: [], games: gamesList().map(g => g.id) };
+    go("setup");
+  },
+  setupPlayer: d => { const p = S.setup.players; const i = p.indexOf(d.id); if (i >= 0) p.splice(i, 1); else p.push(d.id); S.err = ""; render(true); },
+  addMemberSetup: async () => { const el = document.getElementById("newMember"); const name = el.value.trim(); if (!name) return; const id = uid();
+    S.setup.title = document.getElementById("setupTitle").value; await Store.update({ [`members/${id}`]: { name, order: now() } }); S.setup.players.push(id); render(true); },
+  createEvent: async () => {
+    const st = S.setup; st.title = document.getElementById("setupTitle").value.trim() || st.title;
+    if (st.players.length < 2 || st.players.length > 6) { S.err = "参加者を2〜6人選んでください"; return render(true); }
+    if (!st.games.length) { S.err = "抽選に入れるゲームを1つ以上選んでください"; return render(true); }
+    const id = uid(), code = newCode(), t = now();
+    await Store.update({
+      [`events/${id}`]: { title: st.title, code, status: "active", startedAt: t, updatedAt: t,
+        players: Object.fromEntries(st.players.map((p, i) => [p, i])), pool: Object.fromEntries(st.games.map(g => [g, true])) },
+      [`codes/${code}`]: id
+    });
+    S.accessCode = code; S.accessPick = null; toast(`部屋コード ${code} を発行しました`); go("access");
+  },
+  draw: () => {
+    const e = curEv(); let rem = remainingPool(e);
+    if (e.current && rem.length > 1) rem = rem.filter(g => g !== e.current.gameId);
+    if (!rem.length) { S.err = "残りのゲームがありません（「候補」で追加できます）"; return render(true); }
+    const pick = rem[Math.floor(Math.random() * rem.length)];
+    const names = rem.map(g => D().games[g]?.name || "?"); let k = 0; S.err = "";
+    const timer = setInterval(() => { S.drawing = names[k++ % names.length]; render(true); }, 90);
+    setTimeout(async () => {
+      clearInterval(timer); S.drawing = null; const g = D().games[pick];
+      await Store.update({ [`events/${S.eventId}/current`]: { gameId: pick, name: g.isFree ? "" : g.name, mult: g.mult || 1, isFree: !!g.isFree, at: now() }, ...touch() });
+      render(true);
+    }, 1300);
+  },
+  clearCur: async () => { await Store.update({ [`events/${S.eventId}/current`]: null, ...touch() }); },
+  setFree: async () => { const v = document.getElementById("freeName").value.trim(); if (!v) { S.err = "ゲーム名を入力してください"; return render(true); }
+    S.err = ""; await Store.update({ [`events/${S.eventId}/current/name`]: v, ...touch() }); render(true); },
+  openResult: () => { S.editRound = null; S.draft = {}; go("result"); },
+  editRound: d => { const r = curEv().rounds?.[d.id]; if (!r) return; S.editRound = d.id; S.draft = { ...(r.ranks || {}) }; go("result"); },
+  rank: d => { S.draft = S.draft || {}; const r = Number(d.r); S.draft[d.id] = S.draft[d.id] === r ? undefined : r; if (S.draft[d.id] === undefined) delete S.draft[d.id]; S.err = ""; render(true); },
+  submitResult: async () => {
+    const e = curEv(); const ps = playersOf(e); const dr = S.draft || {};
+    const missing = ps.filter(p => !(p in dr)); if (missing.length) { S.err = `${missing.map(mname).join("・")} の順位が未選択です`; return render(true); }
+    const n = ps.filter(p => dr[p] > 0).length; if (n < 2) { S.err = "参加者が2人以上必要です"; return render(true); }
+    const over = ps.filter(p => dr[p] > n); if (over.length) { S.err = `参加は${n}人なので、順位は1〜${n}で選んでください`; return render(true); }
+    const ranks = Object.fromEntries(ps.map(p => [p, dr[p]]));
+    if (S.editRound) {
+      await Store.update({ [`events/${S.eventId}/rounds/${S.editRound}/ranks`]: ranks, ...touch() });
+      toast("結果を修正しました"); S.editRound = null; S.draft = null; return go("standings");
+    }
+    const c = e.current; const rid = uid();
+    await Store.update({ [`events/${S.eventId}/rounds/${rid}`]: { gameId: c.gameId, name: c.name, mult: c.mult || 1, ranks, at: now(), by: S.me || "" },
+      [`events/${S.eventId}/current`]: null, ...touch() });
+    S.draft = null; toast("結果を確定しました"); go("menu");
+  },
+  deleteRound: async () => { if (!confirm("この結果を削除しますか？（元に戻せません）")) return;
+    const r = curEv().rounds?.[S.editRound];
+    await Store.update({ [`events/${S.eventId}/rounds/${S.editRound}`]: null, ...touch() });
+    toast(`${r?.name ?? ""} の結果を削除しました（抽選の候補に戻りました）`); S.editRound = null; S.draft = null; go("standings"); },
+  stTab: d => { S.stTab = d.t; render(true); },
+  finishEvent: async () => { const e = curEv(); if (!confirm(`「${e.title}」を終了しますか？\n部屋コード ${e.code} は使えなくなり、結果は「記録」と「通算」に残ります。`)) return;
+    await Store.update({ [`events/${S.eventId}/status`]: "done", [`events/${S.eventId}/endedAt`]: now(), [`codes/${e.code}`]: null, ...touch() });
+    delete pref.code; savePref(); S.viewEventId = S.eventId; S.eventId = null; toast("大会を終了しました"); go("standings"); },
+  openEvent: d => { const e = evOf(d.id); if (e.status !== "done" && d.id !== S.eventId) { S.accessCode = e.code; S.accessPick = null; S.eventId = null; return go("access"); }
+    S.viewEventId = d.id === S.eventId ? null : d.id; S.stTab = "game"; go("standings"); },
+  addGame: async () => { const name = document.getElementById("gName").value.trim(); if (!name) { S.err = "ゲーム名を入力してください"; return render(true); }
+    const mult = Number(document.getElementById("gMult").value) || 1; const isFree = document.getElementById("gFree").checked; const id = uid();
+    await Store.update({ [`games/${id}`]: { name, mult, isFree, order: now() }, [`events/${S.eventId}/pool/${id}`]: true }); S.err = ""; toast(`${name} を追加しました`); render(true); },
+  delGame: async d => { const g = D().games?.[d.id]; if (!confirm(`「${g.name}」を候補から削除しますか？（遊び終わった記録は残ります）`)) return;
+    await Store.update({ [`games/${d.id}`]: null }); },
+  addMember: async () => { const el = document.getElementById("newMember2"); const name = el.value.trim(); if (!name) return;
+    await Store.update({ [`members/${uid()}`]: { name, order: now() } }); toast(`${name} を名簿に追加しました`); render(true); },
+  seed: async () => { await seedSample(); S.setup.title = document.getElementById("setupTitle").value; S.setup.games = gamesList().map(g => g.id); render(true); },
+  recSel: d => { S.recMember = d.id; render(true); },
+  copyUrl: async () => { const v = document.getElementById("joinUrl").value; try { await navigator.clipboard.writeText(v); toast("リンクをコピーしました"); } catch { document.getElementById("joinUrl").select(); toast("選択したのでコピーしてください"); } }
+};
+const changes = {
+  remember: el => { S.remember = el.checked; },
+  setupGame: el => { const g = S.setup.games; const i = g.indexOf(el.dataset.id); if (el.checked && i < 0) g.push(el.dataset.id); if (!el.checked && i >= 0) g.splice(i, 1); render(true); },
+  poolToggle: el => Store.update({ [`events/${S.eventId}/pool/${el.dataset.id}`]: el.checked ? true : null }),
+  mult: el => Store.update({ [`games/${el.dataset.id}/mult`]: Number(el.value) }),
+  renameMember: el => { const v = el.value.trim(); if (v) Store.update({ [`members/${el.dataset.id}/name`]: v }); }
+};
+document.addEventListener("click", ev => {
+  const el = ev.target.closest("[data-act]"); if (!el || !app.contains(el)) return;
+  if (el.disabled) return; ev.preventDefault(); const f = actions[el.dataset.act]; if (f) f(el.dataset, el);
+});
+document.addEventListener("change", ev => { const el = ev.target; if (el.dataset?.chg && changes[el.dataset.chg]) changes[el.dataset.chg](el); });
+document.addEventListener("input", ev => {
+  if (ev.target.id === "codeInput") {
+    const v = ev.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); const pos = ev.target.selectionStart;
+    if (v !== S.accessCode) { S.accessCode = v; S.accessPick = null; S.err = ""; renderQueued = false; render(true); const ni = document.getElementById("codeInput"); ni.focus(); ni.setSelectionRange(pos, pos); }
+  }
+});
+document.addEventListener("keydown", ev => {
+  if (ev.key !== "Enter") return; const id = ev.target.id;
+  const map = { freeName: "setFree", gName: "addGame", newMember: "addMemberSetup", newMember2: "addMember" };
+  if (map[id]) { ev.preventDefault(); actions[map[id]](); }
+});
+
+/* ---------------- 起動 ---------------- */
+let booted = false;
+Store.onChange = () => {
+  if (!booted) {
+    booted = true;
+    const q = new URLSearchParams(location.search).get("room");
+    if (q) { S.accessCode = q.toUpperCase(); }
+    else if (pref.code && D().codes?.[pref.code] && evOf(D().codes[pref.code])?.players?.[pref.member] !== undefined) {
+      S.eventId = D().codes[pref.code]; S.me = pref.member; S.view = "menu";
+    }
+    // 初回のお試しモードには見本データを入れる
+    if (Store.mode === "local" && !D().games) seedSample();
+  }
+  render();
+};
+async function seedSample() {
+  const names = ["ブラックジャック", "フリップ7", "ヤッツィー", "四麻（半荘）", "キャントストップ", "ラスベガス", "ハーツ（75点）", "インカの黄金", "ゴッドフィールド", "ニムト", "キャット・イン・ザ・ボックス", "キャッスルコンボ", "マインドアップ", "大富豪", "ラッキーナンバー", "ハゲタカのえじき"];
+  const u = {};
+  names.forEach((n, i) => u[`games/g${pad2(i + 1)}`] = { name: n, mult: n === "ゴッドフィールド" ? 2 : 1, isFree: false, order: i });
+  u["games/g99"] = { name: "自由枠", mult: 2, isFree: true, order: 99 };
+  return Store.update(u);
+}
+Store.init().catch(err => showFatal("起動に失敗しました：" + err.message));
+</script>
+</body>
+</html>
