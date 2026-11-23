@@ -96,6 +96,20 @@ table.log td.wincell{background:rgba(242,193,78,.12)}
 table.log td.wincell .pts{color:var(--gold)}
 .yearhd{display:flex;align-items:baseline;gap:10px;border-bottom:2px solid var(--gold);padding-bottom:2px;margin:16px 0 6px}
 .yearhd .mono{font-size:30px;color:var(--gold);line-height:1}.yearhd span:last-child{font-size:12px;color:var(--sub)}
+.gico{display:inline-flex;align-items:center;justify-content:center;border:2px solid;flex-shrink:0;overflow:hidden;color:#fff;font-weight:700;line-height:1;vertical-align:middle;background:#3A3D42}
+.gico img{width:100%;height:100%;object-fit:cover}
+.iconbtn{display:inline-flex}.iconbtn:hover{filter:brightness(1.2)}
+.pastebox{width:76px;height:76px;border:2px dashed #8A8D93;display:flex;align-items:center;justify-content:center;font-size:11px;color:#6B6E74;text-align:center;line-height:1.4}
+.pastebox:focus{outline:3px solid var(--blue);outline-offset:2px}
+.pickstat{display:flex;gap:18px;flex-wrap:wrap;padding:10px 12px;background:var(--dark);border-left:3px solid var(--blue);margin-top:10px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.pcard{display:flex;align-items:center;gap:10px;text-align:left;background:var(--row);color:var(--text);padding:8px 10px;border-left:4px solid transparent;position:relative}
+.pcard.has{border-left-color:var(--gold)}
+.pcard.on{background:var(--panel);color:var(--ink);border-left-color:var(--blue)}
+.pcard .mine{position:absolute;top:4px;right:6px;background:var(--blue);color:#fff;font-size:11px;padding:0 5px}
+.wheelbox{position:relative;flex-shrink:0}
+.wheelbox .pointer{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-top:22px solid var(--panel);filter:drop-shadow(0 1px 0 #000)}
+#wheel{transform-origin:0 0}
 .memstrip{display:flex;gap:14px;flex-wrap:wrap;padding:12px 14px;background:var(--dark);border-left:3px solid var(--blue)}
 .mem{text-align:center;width:80px}
 .mem .av{border-width:3px}
@@ -166,12 +180,14 @@ const ROOT = "gamenight";          // データベース内の保存場所（遊
 const SITE_NAME = "GAME NIGHT";    // サイト名（仮）
 
 /* ---------------- データ保存（Firebase / お試しモード） ---------------- */
-const LOCAL_KEY = "gamenight-local-db";
-const PREF_KEY = "gamenight-pref";
+const DEMO = new URLSearchParams(location.search).get("demo") === "1";   // 練習モード（?demo=1）
+const LOCAL_KEY = DEMO ? "gamenight-demo-db" : "gamenight-local-db";
+const PREF_KEY = DEMO ? "gamenight-demo-pref" : "gamenight-pref";
+const cleanUrl = () => history.replaceState(null, "", location.pathname + (DEMO ? "?demo=1" : ""));
 const Store = {
   mode: "local", data: null, onChange: () => {},
   async init() {
-    if (FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL) {
+    if (!DEMO && FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL) {
       const v = "10.12.2";
       const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${v}/firebase-app.js`);
       const db = await import(`https://www.gstatic.com/firebasejs/${v}/firebase-database.js`);
@@ -297,11 +313,21 @@ function render(force) {
   if (D().config?.closed) { app.innerHTML = viewClosed(); return; }
   // グループが消えた／大会が終わった場合の戻り先
   if (S.groupId && !grp()) { S.groupId = null; S.eventId = null; S.view = "access"; }
-  const inEventViews = ["menu", "draw", "result", "link"];
+  if (S.spinning && !force) { renderQueued = true; return; }
+  const inEventViews = ["menu", "draw", "result", "link", "pick"];
   if (S.eventId && (!curEv() || curEv().status === "done")) { S.eventId = null; if (inEventViews.includes(S.view) || (S.view === "standings" && !S.viewEventId)) S.view = S.groupId ? "hub" : "access"; }
   const v = { access: viewAccess, gnew: viewGroupNew, hub: viewHub, gcfg: viewGroupCfg, games: viewGames, enew: viewEventNew,
-    menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport, prof: viewProfile, archive: viewArchive }[S.view] || viewAccess;
-  app.innerHTML = (Store.mode === "local" ? `<div class="banner">お試しモード：データはこの端末のブラウザだけに保存されます（Firebaseの設定を入れると全員で共有できます）</div>` : "") + v();
+    pick: viewPick, menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport, prof: viewProfile, archive: viewArchive }[S.view] || viewAccess;
+  if (S.eventId && curEv()) {
+    const ph = curEv().phase;
+    if (ph === "pick" && ["menu", "draw", "result"].includes(S.view)) S.view = "pick";
+    if (ph !== "pick" && S.view === "pick") S.view = "menu";
+  }
+  const v2 = { access: viewAccess, gnew: viewGroupNew, hub: viewHub, gcfg: viewGroupCfg, games: viewGames, enew: viewEventNew,
+    pick: viewPick, menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport, prof: viewProfile, archive: viewArchive }[S.view] || viewAccess;
+  const banner = DEMO ? `<div class="banner" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>練習モード：本番とは別のデータで、この端末だけに保存されます。「練習グループ」のパスワードは <b class="mono">demo</b></span><button class="btn2" style="padding:2px 10px;font-size:12px;color:#F2E2B4;border-color:#8a7a4a" data-act="demoReset">練習データを最初に戻す</button></div>`
+    : Store.mode === "local" ? `<div class="banner">お試しモード：データはこの端末のブラウザだけに保存されます（Firebaseの設定を入れると全員で共有できます）</div>` : "";
+  app.innerHTML = banner + v2();
   afterRender();
 }
 document.addEventListener("focusout", () => setTimeout(() => { if (renderQueued) render(); }, 0));
@@ -430,7 +456,7 @@ function viewHub() {
     <button class="h4 h4-blue" data-act="${live ? "openActive" : "newEvent"}">
       <span class="h4top"><span class="mono">01 / EVENT</span><span class="h4ico">⚄</span></span>
       <span><span class="h4t">大会を開く</span>
-      <span class="h4s">${live ? `<span class="h4tag">開催中</span>${esc(live.title)}　${roundsOf(live).length}/${poolSize(live)}ゲーム${roundsOf(live).length ? `　首位 ${lead.map(x => esc(mname(x.id))).join("・")}` : ""}　→ 続きから` : "開催中の大会はありません　→ 新しい大会を始める"}</span></span></button>
+      <span class="h4s">${live && live.phase === "pick" ? `<span class="h4tag">ゲーム選び中</span>${esc(live.title)}　選び終わった人 ${playersOf(live).filter(p => live.pickDone?.[p]).length}/${playersOf(live).length}　→ 選びに行く` : live ? `<span class="h4tag">開催中</span>${esc(live.title)}　${roundsOf(live).length}/${poolSize(live)}ゲーム${roundsOf(live).length ? `　首位 ${lead.map(x => esc(mname(x.id))).join("・")}` : ""}　→ 続きから` : "開催中の大会はありません　→ 新しい大会を始める"}</span></span></button>
     <button class="h4 h4-light" style="border-top:4px solid var(--gold)" data-act="go" data-v="archive">
       <span class="h4top"><span class="mono">02 / ARCHIVE</span><span class="h4ico">▤</span></span>
       <span><span class="h4t">過去の大会</span>
@@ -526,16 +552,26 @@ function viewGames() {
       <option value="">未分類</option>${cats.map(c => `<option value="${c.id}" ${x.cat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>`;
   return `${header("ゲームマスタ / GAME MASTER", e ? "menu" : "hub")}
   <div style="display:flex;gap:6px;flex-wrap:wrap">${tab("all", "すべて")}${cats.map(c => tab(c.id, c.name, c.color)).join("")}${tab("none", "未分類", "#868E96")}</div>
+  ${S.giconFor && g.games?.[S.giconFor] ? (() => { const gx = { id: S.giconFor, ...g.games[S.giconFor] };
+    return `<div class="wp top-o" style="padding:12px 14px;margin-top:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <button id="pastebox" class="pastebox" title="ここを選んで Ctrl+V">${gx.icon ? gameIcon(gx, 64) : "ここで<br>Ctrl+V"}</button>
+      <div style="font-size:13px;line-height:1.8;flex:1;min-width:240px"><span class="capg">ICON（${esc(gx.name)}）</span><br>
+        ① BGAなどのページで画像を右クリック →「画像をコピー」<br>② 左の枠を押して Ctrl+V（Macは ⌘+V）で貼り付け<br>
+        <span style="display:inline-flex;gap:6px;margin-top:4px;flex-wrap:wrap"><label class="btn" style="font-size:13px;padding:5px 12px;cursor:pointer">ファイルを選ぶ<input type="file" accept="image/*" data-chg="gIconFile" style="display:none"></label>
+        ${gx.icon ? `<button class="btn2" style="color:var(--ink);border-color:#8A8D93;font-size:12px" data-act="gIconClear">外す</button>` : ""}
+        <button class="btn2" style="color:var(--ink);border-color:#8A8D93;font-size:12px" data-act="gIconClose">閉じる</button></span>
+        <br><span style="font-size:11px;color:#6B6E74">自動で正方形に切り抜き・縮小して保存します。画像の権利は元のサイトにあるので、仲間内で使う範囲にとどめてください。</span></div></div>`; })() : ""}
   <div style="overflow-x:auto;margin-top:10px"><table class="master">
-    <tr>${e ? "<th>抽選</th>" : ""}<th style="min-width:170px">ゲーム名</th><th>分類</th><th>倍率</th><th style="min-width:180px">URL</th><th style="min-width:160px">メモ</th><th></th></tr>
-    ${list.map(x => `<tr>
+    <tr><th>アイコン</th>${e ? "<th>抽選</th>" : ""}<th style="min-width:170px">ゲーム名</th><th>分類</th><th>倍率</th><th style="min-width:180px">URL</th><th style="min-width:160px">メモ</th><th></th></tr>
+    ${list.map(x => `<tr style="${S.giconFor === x.id ? "background:rgba(46,143,216,.12)" : ""}">
+      <td><button class="iconbtn" data-act="gIconOpen" data-id="${x.id}" title="アイコンを登録">${gameIcon(x, 34)}</button></td>
       ${e ? `<td><input type="checkbox" style="width:18px;height:18px;accent-color:var(--blue)" data-chg="poolToggle" data-id="${x.id}" ${e.pool?.[x.id] ? "checked" : ""} ${played.has(x.id) ? "disabled" : ""} title="今の大会の抽選に入れる"></td>` : ""}
       <td><input class="field" style="padding:4px 6px" value="${esc(x.name)}" data-chg="gfield" data-k="name" data-id="${x.id}">${x.isFree ? '<span class="dim" style="font-size:11px">自由枠</span>' : ""}${played.has(x.id) ? '<span class="dim" style="font-size:11px">（済）</span>' : ""}</td>
       <td>${catSel(x)}</td>
       <td><select class="field" style="width:auto;padding:3px 4px" data-chg="mult" data-id="${x.id}">${[1, 2, 3].map(m => `<option value="${m}" ${(x.mult || 1) === m ? "selected" : ""}>×${m}</option>`).join("")}</select></td>
       <td><input class="field mono" style="padding:4px 6px;font-size:12px" value="${esc(x.url || "")}" placeholder="https://…" data-chg="gfield" data-k="url" data-id="${x.id}"></td>
       <td><input class="field" style="padding:4px 6px;font-size:12px" value="${esc(x.memo || "")}" placeholder="ルールの補足など" data-chg="gfield" data-k="memo" data-id="${x.id}"></td>
-      <td><button class="btn2" style="padding:3px 8px;font-size:12px" data-act="delGame" data-id="${x.id}">削除</button></td></tr>`).join("") || `<tr><td colspan="7" class="muted">この分類のゲームはありません</td></tr>`}
+      <td><button class="btn2" style="padding:3px 8px;font-size:12px" data-act="delGame" data-id="${x.id}">削除</button></td></tr>`).join("") || `<tr><td colspan="8" class="muted">この分類のゲームはありません</td></tr>`}
   </table></div>
   <p class="muted" style="font-size:11px;margin:4px 0 0">名前・URL・メモは入力欄から離れると保存されます。</p>
   <div class="grid2" style="grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);margin-top:16px">
@@ -564,10 +600,9 @@ function viewGames() {
 
 /* ----- 新しい大会 ----- */
 function viewEventNew() {
-  const g = grp(), st = S.setup; const all = groupGames(g); const cats = catsOf(g);
-  const groups = cats.map(c => ({ key: c.id, c, items: all.filter(x => x.cat === c.id) })).concat([{ key: "none", c: null, items: all.filter(x => !catOf(g, x.cat)) }]).filter(x => x.items.length);
+  const g = grp(), st = S.setup;
   return `${header("新しい大会 / NEW EVENT", "hub")}
-  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)">
+  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
     <div>
       <p class="cap">EVENT TITLE</p>
       <input class="field" data-inp="setup.title" value="${esc(st.title)}">
@@ -577,18 +612,100 @@ function viewEventNew() {
       </div>
     </div>
     <div>
-      <p class="cap">GAME POOL（抽選に入れるゲーム・分類ごとにまとめて選べます）</p>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-        ${groups.map(x => { const sel = x.items.filter(i => st.games.includes(i.id)).length; const full = sel === x.items.length;
-          return `<button class="catpick ${full ? "on" : sel ? "part" : ""}" style="--cc:${x.c ? x.c.color : "#868E96"}" data-act="setupCat" data-k="${x.key}">${full ? "☑" : sel ? "◪" : "☐"} ${esc(x.c ? x.c.name : "未分類")}（${sel}/${x.items.length}）</button>`; }).join("")}
-      </div>
-      <div class="list" style="max-height:400px;overflow:auto">
-        ${groups.map(x => `<p class="capg" style="margin:6px 0 2px;color:${x.c ? x.c.color : "#868E96"}">${esc(x.c ? x.c.name : "未分類")}</p>` + x.items.map(i => `<label class="chk row" style="padding:5px 10px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-chg="setupGame" data-id="${i.id}" ${st.games.includes(i.id) ? "checked" : ""}>${esc(i.name)}${multBadge(i.mult)}</span></label>`).join("")).join("") || `<p class="muted">ゲームがありません。グループの「ゲームマスタ」で追加してください</p>`}
-      </div>
-      <p class="muted" style="font-size:12px">選択中 ${st.games.length} ゲーム</p>
+      <p class="cap">NEXT STEP</p>
+      <div class="row" style="display:block;padding:12px 14px;line-height:1.8">
+        ① 大会を作ると「ゲーム選び」の画面になります<br>② 参加者がそれぞれ自分の端末で、遊びたいゲームを選びます<br>③ 「抽選へ進む」で、選ばれたゲームを候補にルーレットで抽選します</div>
     </div>
   </div>
-  <div style="margin-top:18px"><button class="btn gold" data-act="createEvent">大会を開始</button><p class="err">${esc(S.err)}</p></div>`;
+  <div style="margin-top:18px"><button class="btn gold" data-act="createEvent">大会を作ってゲーム選びへ</button><p class="err">${esc(S.err)}</p></div>`;
+}
+
+/* ----- ゲームのアイコン ----- */
+function gameIcon(x, size = 32) {
+  const c = catOf(grp(), x?.cat)?.color || "#868E96";
+  if (x?.icon) return `<span class="gico" style="width:${size}px;height:${size}px;border-color:${c}"><img src="${esc(x.icon)}" alt=""></span>`;
+  return `<span class="gico" style="width:${size}px;height:${size}px;border-color:${c};background:${c};font-size:${Math.round(size * .5)}px">${esc((x?.name || "?").slice(0, 1))}</span>`;
+}
+function nextEventNo(gid) {
+  const found = groupEvents(gid).map(e => { const m = String(e.title || "").replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0)).match(/第\s*(\d+)\s*回/); return m ? Number(m[1]) : 0; }).filter(n => n > 0);
+  return found.length ? Math.max(...found) + 1 : groupEvents(gid).length + 1;
+}
+
+/* ----- ゲーム選び（みんなで選ぶ） ----- */
+function viewPick() {
+  const e = curEv(); const g = grp(); const ps = playersOf(e);
+  const picks = e.picks || {}, doneMap = e.pickDone || {};
+  const canPick = ps.includes(S.me);
+  const all = groupGames(g); const cats = catsOf(g); const f = S.pfilter || "all";
+  const pickersOf = gid => ps.filter(p => picks[p]?.[gid]);
+  const union = new Set(ps.flatMap(p => Object.keys(picks[p] || {})).filter(id => g.games?.[id]));
+  const list = all.filter(x => f === "all" ? true : f === "picked" ? union.has(x.id) : f === "none" ? !catOf(g, x.cat) : x.cat === f);
+  const doneCount = ps.filter(p => doneMap[p]).length;
+  const tab = (key, label, color, n) => `<button class="ftab ${f === key ? "on" : ""}" data-act="pfilter" data-f="${key}">${color ? `<span class="sq" style="background:${color}"></span>` : ""}${esc(label)} <span class="mono">${n}</span></button>`;
+  return `${header("ゲーム選び / PICK", "hub")}
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <span style="font-size:18px;font-weight:600">${esc(e.title)}</span><span class="mono muted">選び終わった人 ${doneCount}/${ps.length}　候補 ${union.size}ゲーム</span></div>
+  <div class="pickstat">${ps.map(p => { const n = Object.keys(picks[p] || {}).length;
+      return `<span style="display:flex;align-items:center;gap:6px">${avatar(p, 30)}<span><span style="font-size:14px">${esc(mname(p))}</span>${youTag(p)}<br>
+        <span style="font-size:11px;color:${doneMap[p] ? "var(--green)" : n ? "var(--gold)" : "var(--dim)"}">${doneMap[p] ? `✓ 完了（${n}）` : n ? `選択中（${n}）` : "未着手"}</span></span></span>`; }).join("")}</div>
+  <p class="muted" style="font-size:12px;margin:8px 0">${canPick ? "遊びたいゲームをタップして選んでください（いくつでも）。誰か1人でも選んだゲームが抽選の候補になり、どれも同じ確率で選ばれます。" : "あなたはこの大会の参加者ではないため、選ぶことはできません（見るだけ）。"}</p>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${tab("all", "すべて", "", all.length)}${tab("picked", "選ばれたゲーム", "var(--gold)", union.size)}${cats.map(c => tab(c.id, c.name, c.color, all.filter(x => x.cat === c.id).length)).join("")}${tab("none", "未分類", "#868E96", all.filter(x => !catOf(g, x.cat)).length)}</div>
+  ${canPick && list.length ? `<div style="margin-bottom:8px"><button class="btn2" style="font-size:12px;padding:3px 10px" data-act="pickShown">${list.every(x => picks[S.me]?.[x.id]) ? "表示中のゲームを全部外す" : `表示中のゲームを全部選ぶ（${list.length}）`}</button></div>` : ""}
+  <div class="pgrid">${list.map(x => { const by = pickersOf(x.id); const mine = by.includes(S.me);
+      return `<button class="pcard ${mine ? "on" : ""} ${by.length ? "has" : ""}" data-act="pickToggle" data-id="${x.id}">
+        ${gameIcon(x, 40)}<span style="min-width:0;flex:1"><span style="display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.name)}${x.mult > 1 ? ` <span class="bdg">×${x.mult}</span>` : ""}</span>
+        <span class="avs" style="margin-top:3px;min-height:18px">${by.map(p => avatar(p, 18)).join("") || `<span class="dim" style="font-size:10px">まだ誰も選んでいない</span>`}</span></span>
+        ${mine ? '<span class="mine">✓</span>' : ""}</button>`; }).join("") || `<p class="muted">この分類のゲームはありません</p>`}</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center">
+    ${canPick ? `<button class="${doneMap[S.me] ? "btn2" : "btn"}" data-act="pickDone">${doneMap[S.me] ? "↺ まだ選ぶ（完了を取り消す）" : "✓ 選び終わった"}</button>` : ""}
+    <button class="btn gold" data-act="pickFinish">抽選へ進む（候補 ${union.size}ゲーム）</button>
+    <span class="muted" style="font-size:12px">「抽選へ進む」は誰でも押せます</span></div>
+  <p class="err">${esc(S.err)}</p>`;
+}
+
+/* ----- ルーレット ----- */
+function wheelSvg(items, deg, size = 280) {
+  const g = grp(); const n = Math.max(1, items.length); const seg = 360 / n; const r = 120;
+  const pt = a => { const t = (a - 90) * Math.PI / 180; return [(r * Math.cos(t)).toFixed(2), (r * Math.sin(t)).toFixed(2)]; };
+  const colors = items.map((id, i) => catOf(g, g.games?.[id]?.cat)?.color || PALETTE[i % PALETTE.length]);
+  const segs = items.map((id, i) => {
+    const a0 = i * seg, a1 = (i + 1) * seg; const [x0, y0] = pt(a0), [x1, y1] = pt(a1);
+    const path = n === 1 ? `<circle r="${r}" fill="${colors[i]}"/>` : `<path d="M0 0 L${x0} ${y0} A${r} ${r} 0 ${seg > 180 ? 1 : 0} 1 ${x1} ${y1} Z" fill="${colors[i]}" stroke="#24262A" stroke-width="1.5" ${i % 2 ? 'fill-opacity=".82"' : ""}/>`;
+    const name = g.games?.[id]?.name || "?"; const label = name.length > 7 ? name.slice(0, 6) + "…" : name;
+    const mid = a0 + seg / 2;
+    return path + `<text transform="rotate(${mid}) translate(0 ${-r + 14}) rotate(90)" text-anchor="start" dominant-baseline="middle" font-size="${n > 14 ? 9 : 11}" fill="#fff" style="paint-order:stroke;stroke:#0008;stroke-width:2px">${esc(label)}</text>`;
+  }).join("");
+  return `<div class="wheelbox" style="width:${size}px;height:${size}px">
+    <svg viewBox="-130 -130 260 260" width="${size}" height="${size}" aria-hidden="true">
+      <g id="wheel" style="transform:rotate(${deg}deg)">${segs}</g>
+      <circle r="18" fill="#24262A" stroke="#F4F4F2" stroke-width="2"/><circle r="126" fill="none" stroke="#4A4D53" stroke-width="2"/>
+    </svg><span class="pointer"></span></div>`;
+}
+const wheelRestDeg = (items, gid) => { const i = items.indexOf(gid); if (i < 0) return 0; const seg = 360 / items.length; return 360 - (i + 0.5) * seg; };
+
+/* ----- 練習モードの見本データ ----- */
+async function seedDemo() {
+  const gid = "demogroup"; const u = {}; const mem = {};
+  [["たろう", "taro"], ["じろう", "jiro"], ["さぶろう", "sabu"], ["しろう", "shiro"]].forEach(([n, h], i) => { const id = "demom" + i; u[`members/${id}`] = { name: n, handle: h, order: i, color: PALETTE[i] }; mem[id] = i; });
+  const games = {}; const catBy = { "ハーツ（75点）": "bga", "ニムト": "bga", "ラブレター": "bga", "スカル": "bga", "ヤッツィー": "bga", "インカの黄金": "bga", "ハゲタカのえじき": "bga", "キャントストップ": "bga", "ラッキーナンバー": "bga", "ゴッドフィールド": "site", "人生ゲーム（スイッチ）": "switch", "四麻（半荘）": "real", "大富豪": "real" };
+  const names = SAMPLE_GAMES.concat(["ラブレター", "スカル", "藪の中", "スタータップス", "人生ゲーム（スイッチ）"]);
+  names.forEach((n, i) => games["demog" + i] = { name: n, mult: (n === "ゴッドフィールド" || n.startsWith("人生")) ? 2 : 1, isFree: false, order: i, cat: catBy[n] || null });
+  games["demofree"] = { name: "自由枠", mult: 2, isFree: true, order: 99 };
+  const byKey = Object.fromEntries(Object.entries(games).map(([id, x]) => [nameKey(x.name), id]));
+  const tables = [
+    ["第1回大会", "2025-01-05", "四麻（半荘） 1 3 2 4\nハーツ（75点） 2 3 4 1\n大富豪 1 2 4 3\nハゲタカのえじき 2 3 1 4\nゴッドフィールド 6 8 2 4\nブラックジャック 4 2 1 3\nニムト 1 4 3 2\nラスベガス 4 2 4 2\nラッキーナンバー 3 1 3 4\nインカの黄金 2 1 3 4\nヤッツィー 1 3 4 2\nマインドアップ 4 3 1 2\n自由枠 6 2 8 4\nキャッスルコンボ 3 4 2 1\nフリップ7 4 3 2 1\nキャット・イン・ザ・ボックス 3 4 1 2\nキャントストップ 1 2 3 4"],
+    ["第2回大会", "2025-02-16", "ラブレター 4 1 3 3\nラッキーナンバー 2 3 2 4\n四麻（半荘） 2 1 3 4\n大富豪 2 1 3 4\nハーツ（75点） 3 1 2 4\nラスベガス 3 4 1 2\nスカル 3 2 1 4\nニムト 2 3 1 4\nハゲタカのえじき 1 4 3 2\nヤッツィー 2 3 4 1\nインカの黄金 2 3 1 4\n藪の中 4 2 3 3\nスタータップス 1 2 4 3\n人生ゲーム（スイッチ） 8 6 4 2"],
+    ["第3回大会", "2026-08-30", "ヤッツィー 4 3 1 2\nハーツ（75点） 1 2 4 3\nハゲタカのえじき 4 2 3 1\nニムト 2 3 1 4\n大富豪 2 8 4 6\nラッキーナンバー 4 1 3 3\nラブレター 4 1 2 3\nラスベガス 2 4 3 2\nスカル 3 2 2 4\nインカの黄金 8 6 2 4"]];
+  const ps = Object.keys(mem);
+  tables.forEach(([title, date, text], ti) => {
+    const t = new Date(date + "T12:00:00").getTime(); const rounds = {};
+    parseImport(text, 4, "points").rows.forEach((r, i) => { const gidm = byKey[nameKey(r.name)] || ""; rounds["demor" + ti + "_" + i] = { gameId: gidm, name: r.name, mult: r.mult, ranks: Object.fromEntries(ps.map((p, j) => [p, r.rk[j]])), at: t + i }; });
+    u[`events/demoe${ti}`] = { groupId: gid, title, status: "done", imported: true, startedAt: t, endedAt: t, updatedAt: t, players: mem, pool: {}, rounds };
+  });
+  u[`groups/${gid}`] = { name: "練習グループ", code: "DEMO", createdAt: now(), members: mem, games,
+    categories: Object.fromEntries(DEFAULT_CATS.map(c => [c.id, { name: c.name, color: c.color, order: c.order }])), passHash: await hashPass(gid, "demo") };
+  u["codes/DEMO"] = gid;
+  await Store.update(u);
 }
 
 /* ----- メニュー ----- */
@@ -655,23 +772,28 @@ function viewDraw() {
       <div style="display:flex;gap:6px"><input class="field" id="freeName" placeholder="遊ぶゲーム名を入力"><button class="btn2" data-act="setFree">決定</button></div></div>`;
   }
   const poolGames = groupGames(grp()).filter(x => e.pool?.[x.id]);
+  const wItems = S.spin ? S.spin.items : remainingPool(e);
+  const wDeg = S.spin ? S.spin.from : (cur ? wheelRestDeg(wItems, cur.gameId) : 0);
+  const curGame = cur && !S.spin ? grp()?.games?.[cur.gameId] : null;
   return `${header("抽選 / DRAW", "menu")}
   <div class="grid2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
     <div>
       <div class="stripe"></div>
-      <div class="wp cut top-o ${S.drawing ? "flash" : ""}" style="margin-top:8px;padding:18px 18px 16px">
-        <p class="capg">${S.drawing ? "SCANNING…" : cur ? "TARGET LOCKED" : "STANDBY"}</p>
-        <p style="font-size:32px;font-weight:600;margin:4px 0">${shown ? (shown.name ? esc(shown.name) : "自由枠") : "―"}</p>
-        ${cur && !S.drawing ? (() => { const gm = grp()?.games?.[cur.gameId];
+      <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:8px">
+      ${wItems.length ? wheelSvg(wItems, wDeg) : ""}
+      <div class="wp cut top-o" style="padding:18px 18px 16px;flex:1;min-width:220px">
+        <p class="capg">${S.spin ? "ROULETTE…" : cur ? "TARGET LOCKED" : "STANDBY"}</p>
+        <p style="font-size:30px;font-weight:600;margin:4px 0;display:flex;align-items:center;gap:10px">${S.spin ? "？？？" : cur ? `${curGame ? gameIcon(curGame, 40) : ""}${cur.name ? esc(cur.name) : "自由枠"}` : "―"}</p>
+        ${cur && !S.spin ? (() => { const gm = grp()?.games?.[cur.gameId];
           return `${gm?.memo ? `<p style="font-size:13px;color:#6B6E74;margin:0 0 8px">メモ：${esc(gm.memo)}</p>` : ""}<span style="background:var(--ink);color:var(--panel);font-size:12px;padding:2px 8px">倍率 ×${cur.mult || 1}</span>
             ${gm?.url && /^https?:\/\//.test(gm.url) ? `<a href="${esc(gm.url)}" target="_blank" rel="noopener" class="openlink" style="background:${catOf(grp(), gm.cat)?.color || "var(--blue)"}">↗ 遊ぶページを開く</a>` : ""}`; })() : ""}
-      </div>
+      </div></div>
       ${free}
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-        ${!cur ? `<button class="btn" data-act="draw">⚄ 抽選する</button>`
-          : `<button class="btn" data-act="openResult">✓ このゲームで開始 → 結果入力</button><button class="btn2" data-act="draw">↻ 引き直す</button><button class="btn2" data-act="clearCur">取り消す</button>`}
+        ${!cur ? `<button class="btn" data-act="draw">⟳ ルーレットを回す</button>`
+          : `<button class="btn" data-act="openResult">✓ このゲームで開始 → 結果入力</button><button class="btn2" data-act="draw">⟳ もう一度回す</button><button class="btn2" data-act="clearCur">取り消す</button>`}
       </div>
-      <p class="muted" style="font-size:12px;margin-top:8px">残り ${rem.length} ゲームからランダムに選びます（同じゲームは出ません）</p>
+      <p class="muted" style="font-size:12px;margin-top:8px">残り ${rem.length} ゲームから、どれも同じ確率でルーレットが選びます（同じゲームは出ません）</p>
       <p class="err">${esc(S.err)}</p>
     </div>
     <div>
@@ -680,7 +802,7 @@ function viewDraw() {
         ${poolGames.map(x => {
           const isCur = cur && cur.gameId === x.id, done = played.has(x.id);
           return `<div class="row" style="${isCur ? "background:var(--panel);color:var(--ink);border-left:3px solid var(--orange)" : done ? "background:transparent;color:var(--dim);text-decoration:line-through" : ""};padding:5px 10px">
-            <span>${esc(x.name)}${done ? "（済）" : ""}</span><span>${x.mult > 1 ? `<span style="color:${isCur ? "var(--red)" : "#F27C7C"}">×${x.mult}</span>` : ""}</span></div>`;
+            <span style="display:flex;align-items:center;gap:6px">${gameIcon(x, 20)}${esc(x.name)}${done ? "（済）" : ""}</span><span>${x.mult > 1 ? `<span style="color:${isCur ? "var(--red)" : "#F27C7C"}">×${x.mult}</span>` : ""}</span></div>`;
         }).join("") || `<p class="muted">抽選に入っているゲームがありません。「候補」で追加してください</p>`}
       </div>
     </div>
@@ -961,7 +1083,7 @@ function viewProfile() {
     </div>
   </div>`;
 }
-function resizeIcon(file) {
+function resizeIcon(file, size = 96) {
   return new Promise((res, rej) => {
     const fr = new FileReader();
     fr.onerror = () => rej(new Error("画像を読み込めませんでした"));
@@ -969,7 +1091,7 @@ function resizeIcon(file) {
       const img = new Image();
       img.onerror = () => rej(new Error("この画像は使えません"));
       img.onload = () => {
-        const size = 96, cv = document.createElement("canvas"); cv.width = cv.height = size;
+        const cv = document.createElement("canvas"); cv.width = cv.height = size;
         const s0 = Math.min(img.width, img.height), sx = (img.width - s0) / 2, sy = (img.height - s0) / 2;
         const ctx = cv.getContext("2d"); ctx.fillStyle = "#3A3D42"; ctx.fillRect(0, 0, size, size);
         ctx.drawImage(img, sx, sy, s0, s0, 0, 0, size, size);
@@ -983,7 +1105,7 @@ function resizeIcon(file) {
 }
 
 /* ----- 別の端末で入る ----- */
-function joinUrl(code) { return location.origin + location.pathname + "?room=" + encodeURIComponent(code); }
+function joinUrl(code) { return location.origin + location.pathname + "?room=" + encodeURIComponent(code) + (DEMO ? "&demo=1" : ""); }
 function viewLink() {
   const g = grp(); const url = joinUrl(g.code);
   return `${header("別の端末で入る / LINK", S.eventId ? "menu" : "hub")}
@@ -1036,7 +1158,7 @@ function enterGroup(gid, mid) {
   S.groupId = gid; S.me = mid; const g = grpOf(gid);
   if (!g.categories) Store.update({ [`groups/${gid}/categories`]: Object.fromEntries(DEFAULT_CATS.map(c => [c.id, { name: c.name, color: c.color, order: c.order }])) });
   const act = g.activeEvent && evOf(g.activeEvent);
-  if (act && act.status !== "done" && act.players?.[mid] !== undefined) { S.eventId = g.activeEvent; go("menu"); }
+  if (act && act.status !== "done" && act.players?.[mid] !== undefined) { S.eventId = g.activeEvent; go(act.phase === "pick" ? "pick" : "menu"); }
   else { S.eventId = null; go("hub"); }
 }
 
@@ -1074,7 +1196,7 @@ const actions = {
     if (!g || !S.unlocked[gid]) { S.err = "先にパスワードを解除してください"; return render(true); }
     if (!S.accessPick) { S.err = "自分の名前を選んでください"; return render(true); }
     if (S.remember) { pref.gid = gid; pref.member = S.accessPick; pref.ph = g.passHash; delete pref.code; savePref(); }
-    history.replaceState(null, "", location.pathname);
+    cleanUrl();
     enterGroup(gid, S.accessPick);
   },
   /* グループ作成 */
@@ -1112,36 +1234,38 @@ const actions = {
   delGame: async d => { const x = grp().games?.[d.id]; if (!confirm(`「${x.name}」を候補から削除しますか？（遊び終わった記録は残ります）`)) return;
     await Store.update({ [`groups/${S.groupId}/games/${d.id}`]: null }); },
   /* 大会 */
-  newEvent: () => { const g = grp(); const n = groupEvents(S.groupId).length + 1;
-    S.setup = { title: `第${n}回大会`, players: groupMembers(g), games: groupGames(g).map(x => x.id) }; go("enew"); },
+  newEvent: () => { const g = grp(); const n = nextEventNo(S.groupId);
+    S.setup = { title: `第${n}回大会`, players: groupMembers(g) }; go("enew"); },
   setupPlayer: d => { const p = S.setup.players; const i = p.indexOf(d.id); if (i >= 0) p.splice(i, 1); else p.push(d.id); S.err = ""; render(true); },
   createEvent: async () => {
     const st = S.setup; const g = grp();
     if (g.activeEvent && evOf(g.activeEvent)?.status !== "done") { S.err = "開催中の大会があります。先に終了してください"; return render(true); }
     const order = groupMembers(g).filter(id => st.players.includes(id));
     if (order.length < 2 || order.length > 6) { S.err = "参加者を2〜6人にしてください"; return render(true); }
-    if (!st.games.length) { S.err = "抽選に入れるゲームを1つ以上選んでください"; return render(true); }
     const id = uid(), t = now();
     await Store.update({
-      [`events/${id}`]: { groupId: S.groupId, title: st.title.trim() || "大会", status: "active", startedAt: t, updatedAt: t,
-        players: Object.fromEntries(order.map((p, i) => [p, i])), pool: Object.fromEntries(st.games.map(x => [x, true])) },
+      [`events/${id}`]: { groupId: S.groupId, title: st.title.trim() || "大会", status: "active", phase: "pick", startedAt: t, updatedAt: t,
+        players: Object.fromEntries(order.map((p, i) => [p, i])), pool: {} },
       [`groups/${S.groupId}/activeEvent`]: id
     });
-    S.eventId = id; toast("大会を開始しました"); go("menu");
+    S.eventId = id; toast("大会を作りました。遊びたいゲームを選んでください"); go("pick");
   },
-  openActive: () => { const g = grp(); S.eventId = g.activeEvent; go("menu"); },
+  openActive: () => { const g = grp(); S.eventId = g.activeEvent; go(evOf(g.activeEvent)?.phase === "pick" ? "pick" : "menu"); },
   draw: () => {
-    const e = curEv(); let rem = remainingPool(e);
+    if (S.spin) return;
+    const e = curEv(); const items = remainingPool(e); let rem = items.slice();
     if (e.current && rem.length > 1) rem = rem.filter(x => x !== e.current.gameId);
     if (!rem.length) { S.err = "残りのゲームがありません（「候補」で追加できます）"; return render(true); }
     const pick = rem[Math.floor(Math.random() * rem.length)];
-    const names = rem.map(x => gameOf(e, x)?.name || "?"); let k = 0; S.err = "";
-    const timer = setInterval(() => { S.drawing = names[k++ % names.length]; render(true); }, 90);
+    const from = e.current ? wheelRestDeg(items, e.current.gameId) : 0;
+    const to = from - (from % 360) + 360 * 6 + wheelRestDeg(items, pick);
+    S.err = ""; S.spin = { items, from }; S.spinning = true; render(true);
+    requestAnimationFrame(() => requestAnimationFrame(() => { const w = document.getElementById("wheel"); if (w) { w.style.transition = "transform 3.4s cubic-bezier(.12,.72,.12,1)"; w.style.transform = `rotate(${to}deg)`; } }));
     setTimeout(async () => {
-      clearInterval(timer); S.drawing = null; const x = gameOf(e, pick);
+      const x = gameOf(e, pick);
       await Store.update({ [`events/${S.eventId}/current`]: { gameId: pick, name: x.isFree ? "" : x.name, mult: x.mult || 1, isFree: !!x.isFree, at: now() }, ...touch() });
-      render(true);
-    }, 1300);
+      S.spin = null; S.spinning = false; render(true);
+    }, 3600);
   },
   clearCur: async () => { await Store.update({ [`events/${S.eventId}/current`]: null, ...touch() }); },
   setFree: async () => { const v = document.getElementById("freeName").value.trim(); if (!v) { S.err = "ゲーム名を入力してください"; return render(true); }
@@ -1220,11 +1344,37 @@ const actions = {
     if (e.imported) u[`events/${id}/endedAt`] = dt;
     await Store.update(u); S.evEdit = null; S.err = ""; toast("大会名と日付を保存しました"); render(true);
   },
+  pfilter: d => { S.pfilter = d.f; render(true); },
+  pickToggle: async d => { const e = curEv(); if (!playersOf(e).includes(S.me)) { toast("参加者だけが選べます"); return; }
+    const on = !!e.picks?.[S.me]?.[d.id];
+    await Store.update({ [`events/${S.eventId}/picks/${S.me}/${d.id}`]: on ? null : true, ...touch() }); },
+  pickShown: async () => { const e = curEv(); const g = grp(); const f = S.pfilter || "all";
+    const union = new Set(playersOf(e).flatMap(p => Object.keys(e.picks?.[p] || {})));
+    const list = groupGames(g).filter(x => f === "all" ? true : f === "picked" ? union.has(x.id) : f === "none" ? !catOf(g, x.cat) : x.cat === f);
+    const allMine = list.every(x => e.picks?.[S.me]?.[x.id]); const u = { ...touch() };
+    list.forEach(x => u[`events/${S.eventId}/picks/${S.me}/${x.id}`] = allMine ? null : true);
+    await Store.update(u); },
+  pickDone: async () => { const e = curEv(); const on = !!e.pickDone?.[S.me];
+    if (!on && !Object.keys(e.picks?.[S.me] || {}).length && !confirm("まだ1つも選んでいません。選ばずに完了にしますか？")) return;
+    await Store.update({ [`events/${S.eventId}/pickDone/${S.me}`]: on ? null : true, ...touch() }); },
+  pickFinish: async () => {
+    const e = curEv(); const g = grp(); const ps = playersOf(e);
+    const union = [...new Set(ps.flatMap(p => Object.keys(e.picks?.[p] || {})))].filter(id => g.games?.[id]);
+    if (!union.length) { S.err = "まだ誰もゲームを選んでいません"; return render(true); }
+    const notDone = ps.filter(p => !e.pickDone?.[p]);
+    if (notDone.length && !confirm(`まだ選び終わっていない人がいます（${notDone.map(mname).join("・")}）。\nこのまま抽選へ進みますか？（候補 ${union.length}ゲーム）`)) return;
+    await Store.update({ [`events/${S.eventId}/pool`]: Object.fromEntries(union.map(id => [id, true])), [`events/${S.eventId}/phase`]: "play", ...touch() });
+    toast(`候補 ${union.length}ゲームで抽選を始めます`); go("draw");
+  },
+  gIconOpen: d => { S.giconFor = d.id; render(true); setTimeout(() => document.getElementById("pastebox")?.focus(), 0); },
+  gIconClose: () => { S.giconFor = null; render(true); },
+  gIconClear: async () => { await Store.update({ [`groups/${S.groupId}/games/${S.giconFor}/icon`]: null }); toast("アイコンを外しました"); },
+  demoReset: () => { if (!confirm("練習データを最初の状態に戻しますか？")) return; localStorage.removeItem(LOCAL_KEY); localStorage.removeItem(PREF_KEY); location.reload(); },
   arTab: d => { S.arTab = d.t; render(true); },
   recSel: d => { S.recMember = d.id; render(true); },
   copyUrl: async () => { const v = document.getElementById("joinUrl").value; try { await navigator.clipboard.writeText(v); toast("リンクをコピーしました"); } catch { document.getElementById("joinUrl").select(); toast("選択したのでコピーしてください"); } },
   /* 過去の大会の登録 */
-  newImport: () => { const g = grp(); S.imp = { title: `第${groupEvents(S.groupId).length + 1}回大会`, date: isoDate(now()), players: groupMembers(g).slice(0, 6), text: "", rows: [], mode: "points", excelTotals: null }; go("imp"); },
+  newImport: () => { const g = grp(); S.imp = { title: `第${nextEventNo(S.groupId)}回大会`, date: isoDate(now()), players: groupMembers(g).slice(0, 6), text: "", rows: [], mode: "points", excelTotals: null }; go("imp"); },
   impPlayer: d => { const p = S.imp.players; const i = p.indexOf(d.id); if (i >= 0) p.splice(i, 1); else if (p.length < 6) p.push(d.id); S.imp.rows.forEach(r => { for (const k in r.ranks) if (!p.includes(k)) delete r.ranks[k]; }); render(true); },
   impMode: d => { S.imp.mode = d.m; if (S.imp.text.trim() && S.imp.rows.length) { actions.impParse(); toast(d.m === "points" ? "点数として読み直しました" : "順位として読み直しました"); } else render(true); },
   impParse: () => {
@@ -1284,6 +1434,7 @@ const changes = {
   gfield: el => { const k = el.dataset.k; const v = el.value.trim(); if (k === "name" && !v) { render(true); return; }
     Store.update({ [`groups/${S.groupId}/games/${el.dataset.id}/${k}`]: v || null }); },
   catName: el => { const v = el.value.trim(); if (v) Store.update({ [`groups/${S.groupId}/categories/${el.dataset.id}/name`]: v }); },
+  gIconFile: async el => { const f = el.files?.[0]; if (!f) return; await saveGameIcon(f); },
   impCol: el => { impReassign(Number(el.dataset.ci), el.value); render(true); },
   profIcon: async el => { const f = el.files?.[0]; if (!f) return; try { S.prof.icon = await resizeIcon(f); S.err = ""; } catch (e) { S.err = e.message; } render(true); },
   impCand: el => { S.imp.rows[Number(el.dataset.ri)].addCand = el.checked; render(true); }
@@ -1303,6 +1454,16 @@ document.addEventListener("input", ev => {
   const p = el.dataset?.inp; if (!p) return;
   if (p === "impName") { S.imp.rows[Number(el.dataset.ri)].name = el.value; return; }
   setByPath(p, el.value);
+});
+async function saveGameIcon(file) {
+  try { const url = await resizeIcon(file, 64); await Store.update({ [`groups/${S.groupId}/games/${S.giconFor}/icon`]: url }); toast("アイコンを登録しました"); }
+  catch (e) { toast(e.message); }
+}
+document.addEventListener("paste", async ev => {
+  if (S.view !== "games" || !S.giconFor) return;
+  const item = [...(ev.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+  if (!item) { toast("画像が見つかりません。画像を右クリック→「画像をコピー」してから貼り付けてください"); return; }
+  ev.preventDefault(); await saveGameIcon(item.getAsFile());
 });
 document.addEventListener("keydown", ev => {
   if (ev.key !== "Enter") return; const id = ev.target.id;
@@ -1338,12 +1499,13 @@ Store.onChange = async () => {
   if (!booted) {
     booted = true;
     try { await migrate(); } catch (err) { console.error(err); }
+    if (DEMO && !D().groups) { await seedDemo(); }
     const q = new URLSearchParams(location.search).get("room");
     const qg = q && D().codes?.[q.toUpperCase()];
     if (pref.gid && grpOf(pref.gid) && grpOf(pref.gid).passHash && pref.ph === grpOf(pref.gid).passHash && grpOf(pref.gid).members?.[pref.member] !== undefined && (!qg || qg === pref.gid)) {
-      history.replaceState(null, "", location.pathname); enterGroup(pref.gid, pref.member); return;
+      cleanUrl(); enterGroup(pref.gid, pref.member); return;
     }
-    if (qg && grpOf(qg)) { S.accessGroup = qg; history.replaceState(null, "", location.pathname); }
+    if (qg && grpOf(qg)) { S.accessGroup = qg; cleanUrl(); }
   }
   render();
 };
