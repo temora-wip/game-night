@@ -870,7 +870,7 @@ function viewImport() {
     </div>
   </div>`;
 }
-function normName(s) { return String(s).replace(/^[①-⑳⓪\s]+/, "").replace(/[０-９Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim(); }
+function normName(s) { return String(s).replace(/^[①-⑳⓪\s]+/, "").replace(/[０-９Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\s*[（(]\s*\d+\s*倍\s*[）)]\s*$/, "").trim(); }
 const nameKey = s => String(s).normalize("NFKC").replace(/\s+/g, "").toLowerCase();
 // mode: "points"＝数字は点数（高いほど上位）、"rank"＝数字は順位（小さいほど上位）
 function parseImport(text, n, mode) {
@@ -881,14 +881,18 @@ function parseImport(text, n, mode) {
     let name, cells;
     if (line.includes("\t")) { const c = line.split("\t"); name = c[0]; cells = c.slice(1); }
     else { const t = line.trim().split(/\s+/); const i = t.findIndex(x => toNum(x) !== null && !isNaN(toNum(x))); if (i <= 0) continue; name = t.slice(0, i).join(" "); cells = t.slice(i); }
-    name = normName(name);
+    const rawName = String(name); name = normName(name);
     const vals = Array.from({ length: n }, (_, i) => toNum(cells[i]));
     if (!name) continue;
     if (/合計/.test(name)) { if (vals.every(v => v !== null && !Number.isNaN(v))) totals = vals; continue; }
     if (vals.some(v => Number.isNaN(v)) || vals.every(v => v === null)) continue; // 見出し行など
     const present = vals.filter(v => v !== null); const m = present.length;
     const sum = present.reduce((a, b) => a + b, 0); const base = m * (m + 1) / 2;
-    let k = Math.max(1, Math.round(sum / base)); if (k > 3 || !present.every(v => v % k === 0)) k = 1;
+    // 倍率の判定：割り切れて、割った値がすべて1〜参加人数に収まる倍率の中から、合計が「1〜人数の合計」に最も近いものを選ぶ（同点があっても判定できる）
+    const hint = (rawName.match(/[（(]\s*([2-3２-３])\s*倍\s*[）)]/) || [])[1];
+    const cands = [1, 2, 3].filter(c => present.every(v => v % c === 0 && v / c >= 1 && v / c <= m));
+    let k = cands.length ? cands.reduce((a, c) => Math.abs(sum / c - base) < Math.abs(sum / a - base) ? c : a) : 1;
+    if (hint) { const h = Number(String(hint).replace(/[２-３]/, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0))); if (cands.includes(h)) k = h; }
     let warn = "";
     const rk = vals.map(v => {
       if (v === null) return 0; const q = v / k;
