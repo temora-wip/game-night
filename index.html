@@ -110,6 +110,18 @@ table.log td.wincell .pts{color:var(--gold)}
 .wheelbox{position:relative;flex-shrink:0}
 .wheelbox .pointer{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-top:22px solid var(--panel);filter:drop-shadow(0 1px 0 #000)}
 #wheel{transform-origin:0 0}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;margin-top:12px}
+.rcell{padding:8px 6px;text-align:center;background:var(--row);color:var(--text);border:2px solid transparent}
+.rcell.m2{background:var(--red);color:#fff}.rcell.m3{background:#8E1F17;color:#fff}
+.rcell.done{background:transparent;border:1px dashed var(--line);color:var(--dim)}
+.rcell.now{border-color:var(--panel)}
+.roundhd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:-4px 0 6px}
+.roundhd .lbl{font-size:13px;color:var(--sub);letter-spacing:2px}.roundhd .num{font-size:38px;line-height:1}
+.mtag{background:var(--ink);color:#fff;font-size:18px;padding:2px 12px;border:1px solid var(--line)}.mtag.x{background:var(--red);border-color:var(--red)}
+.rstrip{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.rstrip span{font-family:var(--mono);font-size:11px;padding:1px 6px;background:var(--row);color:var(--sub)}
+.rstrip span.x{background:var(--red);color:#fff}.rstrip span.d{background:transparent;color:var(--dim);border:1px solid #34373C}
+.rstrip span.now{outline:2px solid var(--panel)}
 .memstrip{display:flex;gap:14px;flex-wrap:wrap;padding:12px 14px;background:var(--dark);border-left:3px solid var(--blue)}
 .mem{text-align:center;width:80px}
 .mem .av{border-width:3px}
@@ -314,17 +326,18 @@ function render(force) {
   // グループが消えた／大会が終わった場合の戻り先
   if (S.groupId && !grp()) { S.groupId = null; S.eventId = null; S.view = "access"; }
   if (S.spinning && !force) { renderQueued = true; return; }
-  const inEventViews = ["menu", "draw", "result", "link", "pick"];
+  const inEventViews = ["menu", "draw", "result", "link", "pick", "rounds"];
   if (S.eventId && (!curEv() || curEv().status === "done")) { S.eventId = null; if (inEventViews.includes(S.view) || (S.view === "standings" && !S.viewEventId)) S.view = S.groupId ? "hub" : "access"; }
   const v = { access: viewAccess, gnew: viewGroupNew, hub: viewHub, gcfg: viewGroupCfg, games: viewGames, enew: viewEventNew,
     pick: viewPick, menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport, prof: viewProfile, archive: viewArchive }[S.view] || viewAccess;
   if (S.eventId && curEv()) {
     const ph = curEv().phase;
-    if (ph === "pick" && ["menu", "draw", "result"].includes(S.view)) S.view = "pick";
+    if (ph === "pick" && ["menu", "draw", "result", "rounds"].includes(S.view)) S.view = "pick";
+    if (ph === "rounds" && ["menu", "draw", "result", "pick"].includes(S.view)) S.view = "rounds";
     if (ph !== "pick" && S.view === "pick") S.view = "menu";
   }
   const v2 = { access: viewAccess, gnew: viewGroupNew, hub: viewHub, gcfg: viewGroupCfg, games: viewGames, enew: viewEventNew,
-    pick: viewPick, menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport, prof: viewProfile, archive: viewArchive }[S.view] || viewAccess;
+    pick: viewPick, rounds: viewRounds, menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport, prof: viewProfile, archive: viewArchive }[S.view] || viewAccess;
   const banner = DEMO ? `<div class="banner" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>練習モード：本番とは別のデータで、この端末だけに保存されます。「練習グループ」のパスワードは <b class="mono">demo</b></span><button class="btn2" style="padding:2px 10px;font-size:12px;color:#F2E2B4;border-color:#8a7a4a" data-act="demoReset">練習データを最初に戻す</button></div>`
     : Store.mode === "local" ? `<div class="banner">お試しモード：データはこの端末のブラウザだけに保存されます（Firebaseの設定を入れると全員で共有できます）</div>` : "";
   app.innerHTML = banner + v2();
@@ -335,7 +348,7 @@ document.addEventListener("focusout", () => setTimeout(() => { if (renderQueued)
 function header(tagText, back) {
   const e = curEv(), g = grp();
   const prog = e && ["menu", "draw", "result", "standings"].includes(S.view) && !S.viewEventId
-    ? `<span><span class="pill">GAME</span> <span class="mono" style="color:var(--text);font-size:15px">${pad2(roundsOf(e).length)}/${pad2(poolSize(e))}</span></span>` : "";
+    ? `<span><span class="pill">GAME</span> <span class="mono" style="color:var(--text);font-size:15px">${pad2(roundsOf(e).length)}/${pad2(roundTotal(e))}</span></span>` : "";
   return `<div class="hd"><div class="l">
       ${back ? `<button class="ico" data-act="go" data-v="${back}" aria-label="戻る">←</button>` : ""}
       <span class="tag">${tagText}</span>
@@ -456,7 +469,7 @@ function viewHub() {
     <button class="h4 h4-blue" data-act="${live ? "openActive" : "newEvent"}">
       <span class="h4top"><span class="mono">01 / EVENT</span><span class="h4ico">⚄</span></span>
       <span><span class="h4t">大会を開く</span>
-      <span class="h4s">${live && live.phase === "pick" ? `<span class="h4tag">ゲーム選び中</span>${esc(live.title)}　選び終わった人 ${playersOf(live).filter(p => live.pickDone?.[p]).length}/${playersOf(live).length}　→ 選びに行く` : live ? `<span class="h4tag">開催中</span>${esc(live.title)}　${roundsOf(live).length}/${poolSize(live)}ゲーム${roundsOf(live).length ? `　首位 ${lead.map(x => esc(mname(x.id))).join("・")}` : ""}　→ 続きから` : "開催中の大会はありません　→ 新しい大会を始める"}</span></span></button>
+      <span class="h4s">${live && live.phase === "rounds" ? `<span class="h4tag">ラウンド設定中</span>${esc(live.title)}　→ 設定に行く` : live && live.phase === "pick" ? `<span class="h4tag">ゲーム選び中</span>${esc(live.title)}　選び終わった人 ${playersOf(live).filter(p => live.pickDone?.[p]).length}/${playersOf(live).length}　→ 選びに行く` : live ? `<span class="h4tag">開催中</span>${esc(live.title)}　${roundsOf(live).length}/${poolSize(live)}ゲーム${roundsOf(live).length ? `　首位 ${lead.map(x => esc(mname(x.id))).join("・")}` : ""}　→ 続きから` : "開催中の大会はありません　→ 新しい大会を始める"}</span></span></button>
     <button class="h4 h4-light" style="border-top:4px solid var(--gold)" data-act="go" data-v="archive">
       <span class="h4top"><span class="mono">02 / ARCHIVE</span><span class="h4ico">▤</span></span>
       <span><span class="h4t">過去の大会</span>
@@ -562,13 +575,12 @@ function viewGames() {
         <button class="btn2" style="color:var(--ink);border-color:#8A8D93;font-size:12px" data-act="gIconClose">閉じる</button></span>
         <br><span style="font-size:11px;color:#6B6E74">自動で正方形に切り抜き・縮小して保存します。画像の権利は元のサイトにあるので、仲間内で使う範囲にとどめてください。</span></div></div>`; })() : ""}
   <div style="overflow-x:auto;margin-top:10px"><table class="master">
-    <tr><th>アイコン</th>${e ? "<th>抽選</th>" : ""}<th style="min-width:170px">ゲーム名</th><th>分類</th><th>倍率</th><th style="min-width:180px">URL</th><th style="min-width:160px">メモ</th><th></th></tr>
+    <tr><th>アイコン</th>${e ? "<th>抽選</th>" : ""}<th style="min-width:170px">ゲーム名</th><th>分類</th><th style="min-width:180px">URL</th><th style="min-width:160px">メモ</th><th></th></tr>
     ${list.map(x => `<tr style="${S.giconFor === x.id ? "background:rgba(46,143,216,.12)" : ""}">
       <td><button class="iconbtn" data-act="gIconOpen" data-id="${x.id}" title="アイコンを登録">${gameIcon(x, 34)}</button></td>
       ${e ? `<td><input type="checkbox" style="width:18px;height:18px;accent-color:var(--blue)" data-chg="poolToggle" data-id="${x.id}" ${e.pool?.[x.id] ? "checked" : ""} ${played.has(x.id) ? "disabled" : ""} title="今の大会の抽選に入れる"></td>` : ""}
       <td><input class="field" style="padding:4px 6px" value="${esc(x.name)}" data-chg="gfield" data-k="name" data-id="${x.id}">${x.isFree ? '<span class="dim" style="font-size:11px">自由枠</span>' : ""}${played.has(x.id) ? '<span class="dim" style="font-size:11px">（済）</span>' : ""}</td>
       <td>${catSel(x)}</td>
-      <td><select class="field" style="width:auto;padding:3px 4px" data-chg="mult" data-id="${x.id}">${[1, 2, 3].map(m => `<option value="${m}" ${(x.mult || 1) === m ? "selected" : ""}>×${m}</option>`).join("")}</select></td>
       <td><input class="field mono" style="padding:4px 6px;font-size:12px" value="${esc(x.url || "")}" placeholder="https://…" data-chg="gfield" data-k="url" data-id="${x.id}"></td>
       <td><input class="field" style="padding:4px 6px;font-size:12px" value="${esc(x.memo || "")}" placeholder="ルールの補足など" data-chg="gfield" data-k="memo" data-id="${x.id}"></td>
       <td><button class="btn2" style="padding:3px 8px;font-size:12px" data-act="delGame" data-id="${x.id}">削除</button></td></tr>`).join("") || `<tr><td colspan="8" class="muted">この分類のゲームはありません</td></tr>`}
@@ -580,7 +592,6 @@ function viewGames() {
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <input class="field" id="gName" placeholder="ゲーム名（例：ニムト）" style="flex:1;min-width:160px">
         <select class="field" id="gCat" style="width:auto"><option value="">未分類</option>${cats.map(c => `<option value="${c.id}" ${f === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
-        <select class="field" id="gMult" style="width:auto"><option value="1">×1</option><option value="2">×2</option><option value="3">×3</option></select>
         <label class="chk"><input type="checkbox" id="gFree">自由枠</label>
         <button class="btn2" data-act="addGame">追加</button></div>
       <p class="err">${esc(S.err)}</p>
@@ -653,7 +664,7 @@ function viewPick() {
   ${canPick && list.length ? `<div style="margin-bottom:8px"><button class="btn2" style="font-size:12px;padding:3px 10px" data-act="pickShown">${list.every(x => picks[S.me]?.[x.id]) ? "表示中のゲームを全部外す" : `表示中のゲームを全部選ぶ（${list.length}）`}</button></div>` : ""}
   <div class="pgrid">${list.map(x => { const by = pickersOf(x.id); const mine = by.includes(S.me);
       return `<button class="pcard ${mine ? "on" : ""} ${by.length ? "has" : ""}" data-act="pickToggle" data-id="${x.id}">
-        ${gameIcon(x, 40)}<span style="min-width:0;flex:1"><span style="display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.name)}${x.mult > 1 ? ` <span class="bdg">×${x.mult}</span>` : ""}</span>
+        ${gameIcon(x, 40)}<span style="min-width:0;flex:1"><span style="display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.name)}</span>
         <span class="avs" style="margin-top:3px;min-height:18px">${by.map(p => avatar(p, 18)).join("") || `<span class="dim" style="font-size:10px">まだ誰も選んでいない</span>`}</span></span>
         ${mine ? '<span class="mine">✓</span>' : ""}</button>`; }).join("") || `<p class="muted">この分類のゲームはありません</p>`}</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center">
@@ -708,11 +719,52 @@ async function seedDemo() {
   await Store.update(u);
 }
 
+/* ----- ラウンド設定（ラウンド数とラウンドごとの倍率） ----- */
+const hasRounds = e => !!e?.roundCount;
+const roundMult = (e, n) => Number(e?.roundMults?.["r" + n]) || 1;
+const roundNo = e => roundsOf(e).length + 1;
+const roundTotal = e => hasRounds(e) ? e.roundCount : poolSize(e);
+const curMult = e => hasRounds(e) ? roundMult(e, roundNo(e)) : (e?.current?.mult || 1);
+function viewRounds() {
+  const e = curEv(); const played = roundsOf(e); const n = e.roundCount || poolSize(e);
+  const max = Math.max(played.length + 1, poolSize(e));
+  const setup = e.phase === "rounds";
+  const cells = Array.from({ length: n }, (_, i) => {
+    const k = i + 1; const done = played[i];
+    if (done) return `<div class="rcell done"><div class="mono" style="font-size:11px">R${pad2(k)} ✓</div><div style="font-size:16px">×${done.mult || 1}</div><div style="font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(done.name)}</div></div>`;
+    const m = roundMult(e, k);
+    return `<button class="rcell m${m} ${k === played.length + 1 && !setup ? "now" : ""}" data-act="rMult" data-k="${k}"><div class="mono" style="font-size:11px">R${pad2(k)}${k === played.length + 1 && !setup ? " ◀今" : ""}</div><div style="font-size:18px">×${m}</div></button>`;
+  }).join("");
+  return `${header("ラウンド設定 / ROUNDS", setup ? "hub" : "draw")}
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <span style="font-size:18px;font-weight:600">${esc(e.title)}</span><span class="mono muted">候補 ${poolSize(e)}ゲーム${played.length ? `　終了 ${played.length}ラウンド` : ""}</span></div>
+  <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
+    <span>ラウンド数</span>
+    <button class="btn2" style="padding:2px 12px" data-act="rCount" data-d="-1" ${n <= Math.max(1, played.length) ? "disabled" : ""}>−</button>
+    <span class="mono" style="font-size:28px;min-width:36px;text-align:center">${n}</span>
+    <button class="btn2" style="padding:2px 12px" data-act="rCount" data-d="1" ${n >= max ? "disabled" : ""}>＋</button>
+    <span class="muted" style="font-size:12px">（最大＝候補の数 ${max}）</span>
+    <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn2" style="font-size:12px;padding:3px 10px" data-act="rPreset" data-p="0">全部×1</button>
+      <button class="btn2" style="font-size:12px;padding:3px 10px" data-act="rPreset" data-p="1">最後の1つを×2</button>
+      <button class="btn2" style="font-size:12px;padding:3px 10px" data-act="rPreset" data-p="2">最後の2つを×2</button></span>
+  </div>
+  <div class="rgrid">${cells}</div>
+  <p class="muted" style="font-size:12px;margin:8px 0 0">マスをタップすると ×1 → ×2 → ×3 と切り替わります。まだ遊んでいないラウンドは、大会の途中でも変更できます（変更はすぐ全員に反映されます）。</p>
+  <div style="margin-top:14px">${setup ? `<button class="btn gold" data-act="rStart">この設定で ROUND 1 を始める</button>` : `<button class="btn" data-act="go" data-v="draw">抽選に戻る</button>`}</div>
+  <p class="err">${esc(S.err)}</p>`;
+}
+function roundStrip(e) {
+  const played = roundsOf(e); const n = roundTotal(e); const now = played.length + 1;
+  return `<div class="rstrip">${Array.from({ length: n }, (_, i) => { const k = i + 1; const m = played[i] ? (played[i].mult || 1) : roundMult(e, k);
+    return `<span class="${played[i] ? "d" : ""} ${k === now ? "now" : ""} ${m > 1 ? "x" : ""}">R${k}${played[i] ? "✓" : m > 1 ? ` ×${m}` : ""}</span>`; }).join("")}</div>`;
+}
+
 /* ----- メニュー ----- */
 function viewMenu() {
   const e = curEv(); const st = withMoves(e); const rs = roundsOf(e); const last = rs[rs.length - 1];
   const leaders = st.filter(x => x.rank === 1);
-  const total = poolSize(e) || 1; const ratio = Math.min(1, rs.length / total);
+  const total = roundTotal(e) || 1; const ratio = Math.min(1, rs.length / total);
   const circ = 2 * Math.PI * 36; const second = st.find(x => x.rank > 1); const cur = e.current;
   let latest = "まだ結果がありません";
   if (last) { const p = roundPoints(last); const best = Math.max(...Object.values(p)); const w = Object.keys(p).filter(k => p[k] === best).map(mname).join("・"); latest = `${esc(last.name)}　${esc(w)}が1位`; }
@@ -739,7 +791,7 @@ function viewMenu() {
       <button class="span6 wp cut top-o" data-act="go" data-v="draw" style="text-align:left;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
         <div><p class="capg">NEXT OPERATION</p>
           <p style="font-size:26px;font-weight:600;margin:0">${cur ? (cur.name ? esc(cur.name) : "自由枠（ゲーム選択待ち）") : "未抽選"}</p>
-          ${cur ? `<span style="background:var(--ink);color:var(--panel);font-size:12px;padding:1px 8px">倍率 ×${cur.mult || 1}</span>` : `<span class="dim" style="font-size:13px">タップして抽選</span>`}</div>
+          ${hasRounds(e) && rs.length >= e.roundCount ? `<span class="dim" style="font-size:13px">全ラウンド終了 → 集計で大会を終了</span>` : `<span style="background:${curMult(e) > 1 ? "var(--red)" : "var(--ink)"};color:#fff;font-size:12px;padding:1px 8px">ROUND ${rs.length + 1}　倍率 ×${curMult(e)}</span>${cur ? "" : ` <span class="dim" style="font-size:13px">タップして抽選</span>`}`}</div>
         <div style="text-align:right"><p class="mono" style="font-size:44px;margin:0;line-height:1">${pad2(rs.length + 1)}</p><p class="dim" style="font-size:12px;margin:0">/ ${pad2(total)}</p></div>
       </button>
       <button class="tile wp span3" data-act="go" data-v="draw"><div><p class="t">抽選</p><p class="capg">DRAW</p></div><span style="font-size:26px;color:#C9CACC">⚄</span></button>
@@ -775,25 +827,29 @@ function viewDraw() {
   const wItems = S.spin ? S.spin.items : remainingPool(e);
   const wDeg = S.spin ? S.spin.from : (cur ? wheelRestDeg(wItems, cur.gameId) : 0);
   const curGame = cur && !S.spin ? grp()?.games?.[cur.gameId] : null;
+  const allDone = hasRounds(e) && roundsOf(e).length >= e.roundCount;
+  const m = curMult(e);
   return `${header("抽選 / DRAW", "menu")}
+  ${hasRounds(e) ? `<div class="roundhd"><span class="mono lbl">ROUND</span><span class="mono num">${allDone ? "--" : pad2(roundNo(e))}</span><span class="mono dim">/ ${pad2(e.roundCount)}</span>
+    ${allDone ? `<span class="muted">全ラウンド終了</span>` : `<span class="mtag ${m > 1 ? "x" : ""}">×${m}</span>`}<button class="btn2" style="font-size:12px;padding:2px 10px" data-act="go" data-v="rounds">倍率・ラウンド数を変更</button></div>${roundStrip(e)}` : ""}
   <div class="grid2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
     <div>
       <div class="stripe"></div>
       <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:8px">
-      ${wItems.length ? wheelSvg(wItems, wDeg) : ""}
+      ${wItems.length && !allDone ? wheelSvg(wItems, wDeg) : ""}
       <div class="wp cut top-o" style="padding:18px 18px 16px;flex:1;min-width:220px">
         <p class="capg">${S.spin ? "ROULETTE…" : cur ? "TARGET LOCKED" : "STANDBY"}</p>
         <p style="font-size:30px;font-weight:600;margin:4px 0;display:flex;align-items:center;gap:10px">${S.spin ? "？？？" : cur ? `${curGame ? gameIcon(curGame, 40) : ""}${cur.name ? esc(cur.name) : "自由枠"}` : "―"}</p>
         ${cur && !S.spin ? (() => { const gm = grp()?.games?.[cur.gameId];
-          return `${gm?.memo ? `<p style="font-size:13px;color:#6B6E74;margin:0 0 8px">メモ：${esc(gm.memo)}</p>` : ""}<span style="background:var(--ink);color:var(--panel);font-size:12px;padding:2px 8px">倍率 ×${cur.mult || 1}</span>
+          return `${gm?.memo ? `<p style="font-size:13px;color:#6B6E74;margin:0 0 8px">メモ：${esc(gm.memo)}</p>` : ""}<span style="background:${curMult(e) > 1 ? "var(--red)" : "var(--ink)"};color:#fff;font-size:12px;padding:2px 8px">${hasRounds(e) ? `ROUND ${roundNo(e)}　` : ""}倍率 ×${curMult(e)}</span>
             ${gm?.url && /^https?:\/\//.test(gm.url) ? `<a href="${esc(gm.url)}" target="_blank" rel="noopener" class="openlink" style="background:${catOf(grp(), gm.cat)?.color || "var(--blue)"}">↗ 遊ぶページを開く</a>` : ""}`; })() : ""}
       </div></div>
       ${free}
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-        ${!cur ? `<button class="btn" data-act="draw">⟳ ルーレットを回す</button>`
+        ${allDone ? `<button class="btn" data-act="go" data-v="standings">集計へ（大会を終了する）</button>` : !cur ? `<button class="btn" data-act="draw">⟳ ルーレットを回す</button>`
           : `<button class="btn" data-act="openResult">✓ このゲームで開始 → 結果入力</button><button class="btn2" data-act="draw">⟳ もう一度回す</button><button class="btn2" data-act="clearCur">取り消す</button>`}
       </div>
-      <p class="muted" style="font-size:12px;margin-top:8px">残り ${rem.length} ゲームから、どれも同じ確率でルーレットが選びます（同じゲームは出ません）</p>
+      <p class="muted" style="font-size:12px;margin-top:8px">${allDone ? "全ラウンドが終わりました。集計画面の「大会を終了する」で記録に残ります" : `残り ${rem.length} ゲームから、どれも同じ確率でルーレットが選びます（同じゲームは出ません）`}</p>
       <p class="err">${esc(S.err)}</p>
     </div>
     <div>
@@ -802,7 +858,7 @@ function viewDraw() {
         ${poolGames.map(x => {
           const isCur = cur && cur.gameId === x.id, done = played.has(x.id);
           return `<div class="row" style="${isCur ? "background:var(--panel);color:var(--ink);border-left:3px solid var(--orange)" : done ? "background:transparent;color:var(--dim);text-decoration:line-through" : ""};padding:5px 10px">
-            <span style="display:flex;align-items:center;gap:6px">${gameIcon(x, 20)}${esc(x.name)}${done ? "（済）" : ""}</span><span>${x.mult > 1 ? `<span style="color:${isCur ? "var(--red)" : "#F27C7C"}">×${x.mult}</span>` : ""}</span></div>`;
+            <span style="display:flex;align-items:center;gap:6px">${gameIcon(x, 20)}${esc(x.name)}${done ? "（済）" : ""}</span></div>`;
         }).join("") || `<p class="muted">抽選に入っているゲームがありません。「候補」で追加してください</p>`}
       </div>
     </div>
@@ -822,7 +878,7 @@ function viewResult() {
   const parts = Object.values(dr).filter(v => v > 0).length;
   const prev = roundPoints({ ranks: Object.fromEntries(Object.entries(dr).filter(([, v]) => v > 0)), mult: target.mult });
   return `${header(S.editRound ? "結果の修正 / EDIT" : "結果入力 / RESULT", S.editRound ? "backEdit" : "menu")}
-  <p class="mono dim" style="margin:-6px 0 12px">OP ${esc(target.name)} ×${target.mult || 1}</p>
+  <p class="mono dim" style="margin:-6px 0 12px">${!S.editRound && hasRounds(e) ? `ROUND ${roundNo(e)}　` : ""}${esc(target.name)} ×${S.editRound ? (target.mult || 1) : curMult(e)}</p>
   <div class="grid2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
     <div class="list" style="gap:6px">
       ${ps.map(id => `<div class="row rowcut" style="flex-wrap:wrap"><span>${who(id, 28)}${youTag(id)}</span>
@@ -1158,7 +1214,7 @@ function enterGroup(gid, mid) {
   S.groupId = gid; S.me = mid; const g = grpOf(gid);
   if (!g.categories) Store.update({ [`groups/${gid}/categories`]: Object.fromEntries(DEFAULT_CATS.map(c => [c.id, { name: c.name, color: c.color, order: c.order }])) });
   const act = g.activeEvent && evOf(g.activeEvent);
-  if (act && act.status !== "done" && act.players?.[mid] !== undefined) { S.eventId = g.activeEvent; go(act.phase === "pick" ? "pick" : "menu"); }
+  if (act && act.status !== "done" && act.players?.[mid] !== undefined) { S.eventId = g.activeEvent; go({ pick: "pick", rounds: "rounds" }[act.phase] || "menu"); }
   else { S.eventId = null; go("hub"); }
 }
 
@@ -1226,7 +1282,7 @@ const actions = {
     await Store.update({ [`groups/${S.groupId}/members/${d.id}`]: null }); toast(`${mname(d.id)} を外しました`); },
   /* ゲーム候補 */
   addGame: async () => { const name = document.getElementById("gName").value.trim(); if (!name) { S.err = "ゲーム名を入力してください"; return render(true); }
-    const mult = Number(document.getElementById("gMult").value) || 1; const isFree = document.getElementById("gFree").checked; const id = uid();
+    const mult = 1; const isFree = document.getElementById("gFree").checked; const id = uid();
     const cat = document.getElementById("gCat")?.value || "";
     const u = { [`groups/${S.groupId}/games/${id}`]: { name, mult, isFree, cat, order: now() } };
     if (S.eventId) u[`events/${S.eventId}/pool/${id}`] = true;
@@ -1250,10 +1306,11 @@ const actions = {
     });
     S.eventId = id; toast("大会を作りました。遊びたいゲームを選んでください"); go("pick");
   },
-  openActive: () => { const g = grp(); S.eventId = g.activeEvent; go(evOf(g.activeEvent)?.phase === "pick" ? "pick" : "menu"); },
+  openActive: () => { const g = grp(); S.eventId = g.activeEvent; go({ pick: "pick", rounds: "rounds" }[evOf(g.activeEvent)?.phase] || "menu"); },
   draw: () => {
     if (S.spin) return;
-    const e = curEv(); const items = remainingPool(e); let rem = items.slice();
+    const e = curEv(); if (hasRounds(e) && roundsOf(e).length >= e.roundCount) { S.err = "全ラウンドが終わりました"; return render(true); }
+    const items = remainingPool(e); let rem = items.slice();
     if (e.current && rem.length > 1) rem = rem.filter(x => x !== e.current.gameId);
     if (!rem.length) { S.err = "残りのゲームがありません（「候補」で追加できます）"; return render(true); }
     const pick = rem[Math.floor(Math.random() * rem.length)];
@@ -1263,7 +1320,7 @@ const actions = {
     requestAnimationFrame(() => requestAnimationFrame(() => { const w = document.getElementById("wheel"); if (w) { w.style.transition = "transform 3.4s cubic-bezier(.12,.72,.12,1)"; w.style.transform = `rotate(${to}deg)`; } }));
     setTimeout(async () => {
       const x = gameOf(e, pick);
-      await Store.update({ [`events/${S.eventId}/current`]: { gameId: pick, name: x.isFree ? "" : x.name, mult: x.mult || 1, isFree: !!x.isFree, at: now() }, ...touch() });
+      await Store.update({ [`events/${S.eventId}/current`]: { gameId: pick, name: x.isFree ? "" : x.name, mult: hasRounds(e) ? roundMult(e, roundNo(e)) : (x.mult || 1), isFree: !!x.isFree, at: now() }, ...touch() });
       S.spin = null; S.spinning = false; render(true);
     }, 3600);
   },
@@ -1291,7 +1348,7 @@ const actions = {
       return go("standings");
     }
     const c = e.current; const rid = uid();
-    await Store.update({ [`events/${eid}/rounds/${rid}`]: { gameId: c.gameId, name: c.name, mult: c.mult || 1, ranks, at: now(), by: S.me || "" },
+    await Store.update({ [`events/${eid}/rounds/${rid}`]: { gameId: c.gameId, name: c.name, mult: hasRounds(e) ? roundMult(e, roundNo(e)) : (c.mult || 1), ranks, at: now(), by: S.me || "" },
       [`events/${eid}/current`]: null, ...touch() });
     S.draft = null; toast("結果を確定しました"); go("menu");
   },
@@ -1363,9 +1420,21 @@ const actions = {
     if (!union.length) { S.err = "まだ誰もゲームを選んでいません"; return render(true); }
     const notDone = ps.filter(p => !e.pickDone?.[p]);
     if (notDone.length && !confirm(`まだ選び終わっていない人がいます（${notDone.map(mname).join("・")}）。\nこのまま抽選へ進みますか？（候補 ${union.length}ゲーム）`)) return;
-    await Store.update({ [`events/${S.eventId}/pool`]: Object.fromEntries(union.map(id => [id, true])), [`events/${S.eventId}/phase`]: "play", ...touch() });
-    toast(`候補 ${union.length}ゲームで抽選を始めます`); go("draw");
+    await Store.update({ [`events/${S.eventId}/pool`]: Object.fromEntries(union.map(id => [id, true])), [`events/${S.eventId}/phase`]: "rounds",
+      [`events/${S.eventId}/roundCount`]: union.length, [`events/${S.eventId}/roundMults`]: null, ...touch() });
+    toast(`候補 ${union.length}ゲーム。ラウンド数と倍率を決めてください`); go("rounds");
   },
+  rMult: d => { const e = curEv(); const k = Number(d.k); if (k <= roundsOf(e).length) return; const m = roundMult(e, k) % 3 + 1;
+    Store.update({ [`events/${S.eventId}/roundMults/r${k}`]: m === 1 ? null : m, ...touch() }); },
+  rCount: d => { const e = curEv(); const played = roundsOf(e).length; const max = Math.max(played + 1, poolSize(e));
+    const n = Math.min(max, Math.max(Math.max(1, played), (e.roundCount || poolSize(e)) + Number(d.d)));
+    const u = { [`events/${S.eventId}/roundCount`]: n, ...touch() };
+    Object.keys(e.roundMults || {}).forEach(k => { if (Number(k.slice(1)) > n) u[`events/${S.eventId}/roundMults/${k}`] = null; });
+    Store.update(u); },
+  rPreset: d => { const e = curEv(); const played = roundsOf(e).length; const n = e.roundCount; const p = Number(d.p); const u = { ...touch() };
+    for (let k = played + 1; k <= n; k++) u[`events/${S.eventId}/roundMults/r${k}`] = (p && k > n - p) ? 2 : null;
+    Store.update(u); },
+  rStart: async () => { await Store.update({ [`events/${S.eventId}/phase`]: "play", ...touch() }); toast("ROUND 1 を始めます"); go("draw"); },
   gIconOpen: d => { S.giconFor = d.id; render(true); setTimeout(() => document.getElementById("pastebox")?.focus(), 0); },
   gIconClose: () => { S.giconFor = null; render(true); },
   gIconClear: async () => { await Store.update({ [`groups/${S.groupId}/games/${S.giconFor}/icon`]: null }); toast("アイコンを外しました"); },
@@ -1403,7 +1472,7 @@ const actions = {
     const byName = Object.fromEntries(groupGames(g).map(x => [nameKey(x.name), x]));
     const u = {};
     im.rows.forEach((r, i) => { const key = nameKey(r.name); if (byName[key] || r.addCand === false) return;
-      const gid = uid() + "n" + i; const x = { name: r.name.trim(), mult: r.mult, isFree: /自由枠/.test(r.name), order: now() + i };
+      const gid = uid() + "n" + i; const x = { name: r.name.trim(), isFree: /自由枠/.test(r.name), order: now() + i };
       u[`groups/${S.groupId}/games/${gid}`] = x; byName[key] = { id: gid, ...x }; });
     const rounds = {};
     im.rows.forEach((r, i) => { const hit = byName[nameKey(r.name)]; rounds[uid() + i] = { gameId: hit?.id || "", name: hit ? hit.name : r.name.trim(), mult: r.mult, ranks: Object.fromEntries(ps.map(p => [p, r.ranks[p] || 0])), at: start + i }; });
