@@ -94,6 +94,21 @@ table.log .pts small{font-size:11px;margin-left:1px}
 table.log .cum{font-family:var(--mono);font-size:10px;color:#6B6E74;margin-top:1px}
 table.log td.wincell{background:rgba(242,193,78,.12)}
 table.log td.wincell .pts{color:var(--gold)}
+.memstrip{display:flex;gap:14px;flex-wrap:wrap;padding:12px 14px;background:var(--dark);border-left:3px solid var(--blue)}
+.mem{text-align:center;width:80px}
+.mem .av{border-width:3px}
+.hub4{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+@media (max-width:640px){.hub4{grid-template-columns:1fr}}
+.h4{min-height:128px;padding:16px 18px;display:flex;flex-direction:column;justify-content:space-between;text-align:left;gap:10px}
+.h4:hover{filter:brightness(1.07)}
+.h4top{display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:2px;opacity:.8}
+.h4ico{font-size:24px;opacity:.6}
+.h4t{display:block;font-size:28px;font-weight:600;line-height:1.2}
+.h4s{display:block;font-size:13px;margin-top:2px}
+.h4-blue{background:var(--blue);color:#fff;clip-path:polygon(0 0,100% 0,100% 84%,95% 100%,0 100%)}
+.h4-light{background:var(--panel);color:var(--ink)}.h4-light .h4s{color:#6B6E74}
+.h4-dark{background:var(--bg2);border:1px solid var(--line);color:var(--text)}.h4-dark .h4s{color:var(--sub)}
+.h4tag{background:#fff;color:var(--blue);font-size:11px;padding:0 6px;margin-right:6px}
 .gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
 .gcard{text-align:left;background:var(--row);padding:10px 12px;color:var(--text);border-top:3px solid transparent}
 .gcard:hover{filter:brightness(1.1)}
@@ -283,7 +298,7 @@ function render(force) {
   const inEventViews = ["menu", "draw", "result", "link"];
   if (S.eventId && (!curEv() || curEv().status === "done")) { S.eventId = null; if (inEventViews.includes(S.view) || (S.view === "standings" && !S.viewEventId)) S.view = S.groupId ? "hub" : "access"; }
   const v = { access: viewAccess, gnew: viewGroupNew, hub: viewHub, gcfg: viewGroupCfg, games: viewGames, enew: viewEventNew,
-    menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport, prof: viewProfile }[S.view] || viewAccess;
+    menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport, prof: viewProfile, archive: viewArchive }[S.view] || viewAccess;
   app.innerHTML = (Store.mode === "local" ? `<div class="banner">お試しモード：データはこの端末のブラウザだけに保存されます（Firebaseの設定を入れると全員で共有できます）</div>` : "") + v();
   afterRender();
 }
@@ -389,55 +404,63 @@ function viewGroupNew() {
   <div style="margin-top:18px"><button class="btn gold" data-act="createGroup">グループを作成</button><p class="err">${esc(S.err)}</p></div>`;
 }
 
-/* ----- グループのホーム ----- */
+/* ----- グループのホーム（4つの機能） ----- */
 function viewHub() {
   const g = grp(); const evs = groupEvents(S.groupId); const act = g.activeEvent && evOf(g.activeEvent);
+  const live = act && act.status !== "done" ? act : null;
   const done = evs.filter(e => e.status === "done");
-  const rec = recordStats(S.groupId).order.slice(0, 6);
-  let actHtml;
-  if (act && act.status !== "done") {
-    const st = standingsOf(act, roundsOf(act)); const lead = st.filter(x => x.rank === 1);
-    actHtml = `<div style="background:var(--dark);border-left:3px solid var(--blue);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-      <div><p style="margin:0;font-size:17px">${esc(act.title)}</p><p class="muted" style="margin:0;font-size:13px">${roundsOf(act).length} / ${poolSize(act)} ゲーム　首位 ${lead.map(x => who(x.id, 18, false)).join(" ")} ${lead[0]?.pts ?? 0}pt</p></div>
-      <button class="btn" data-act="openActive">続きから</button></div>`;
-  } else {
-    actHtml = `<div style="background:var(--dark);border-left:3px solid var(--line);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-      <span class="muted">開催中の大会はありません</span><button class="btn" data-act="newEvent">＋ 新しい大会</button></div>`;
-  }
+  const games = groupGames(g); const cats = catsOf(g);
+  const catCount = cats.map(c => ({ c, n: games.filter(x => x.cat === c.id).length })).filter(x => x.n);
+  const none = games.filter(x => !catOf(g, x.cat)).length;
+  const members = groupMembers(g);
+  const strip = members.map(id => {
+    const st = live ? (live.players?.[id] !== undefined ? '<div style="font-size:10px;color:var(--green)">● 参加中</div>' : '<div class="dim" style="font-size:10px">今回不参加</div>') : "";
+    return `<div class="mem"><div style="position:relative;width:58px;height:58px;margin:0 auto">${avatar(id, 58)}${id === S.me ? '<span class="you" style="position:absolute;right:-8px;bottom:-2px;margin:0">YOU</span>' : ""}</div>
+      <div style="font-size:14px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(mname(id))}</div><div class="hdl">@${esc(handleOf(id))}</div>${st}</div>`;
+  }).join("");
+  const lead = live ? standingsOf(live, roundsOf(live)).filter(x => x.rank === 1) : [];
   return `${header("グループ / SQUAD", null)}
-  <div class="grid2" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)">
-    <div>
-      <div class="stripe"></div>
-      <p class="mono dim" style="margin:8px 0 0;font-size:11px">SQUAD</p>
-      <p style="font-size:24px;font-weight:600;margin:0 0 12px">${esc(g.name)}</p>
-      <p class="cap">ACTIVE EVENT</p>
-      ${actHtml}
-      <p class="cap" style="margin-top:16px">ARCHIVE（このグループの過去の大会）</p>
-      <div class="list">
-        ${done.map(e => { const w = standingsOf(e, roundsOf(e)).filter(x => x.rank === 1 && x.pts > 0); const d = new Date(e.startedAt);
-          return `<button class="rowcut" style="display:flex;align-items:stretch;text-align:left;background:var(--row);width:100%" data-act="openEvent" data-id="${e.id}">
-          <span class="wp" style="padding:5px 12px;text-align:center;min-width:80px;display:flex;flex-direction:column;justify-content:center"><span class="mono" style="font-size:10px;color:#6B6E74">${d.getFullYear()}</span><span class="mono" style="font-size:22px;line-height:1.1">${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}</span></span>
-          <span style="flex:1;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 18px 6px 14px;flex-wrap:wrap">
-            <span style="font-size:16px">${esc(e.title)}</span>
-            <span style="display:flex;align-items:center;gap:6px;color:var(--gold);font-size:13px">${w.length ? `<span style="background:var(--gold);color:#2A1E00;font-size:10px;padding:0 6px">WINNER</span>${w.map(x => who(x.id, 20, false)).join(" ")}` : ""}</span></span></button>`; }).join("") || `<p class="muted" style="font-size:13px">まだ終了した大会はありません</p>`}
-      </div>
-      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-        <button class="btn2" data-act="newImport">過去の大会を登録</button>
-      </div>
-    </div>
-    <div>
-      <p class="cap">SQUAD RECORD（このグループの通算）</p>
-      <div class="list">
-        ${rec.map((x, i) => `<div class="${i === 0 && x.win > 0 ? "wp" : "row"}" style="display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:7px 10px;${i === 0 && x.win > 0 ? "border-left:4px solid var(--gold)" : ""}">
-          <span>${who(x.id, 24)}${youTag(x.id)}${g.members?.[x.id] === undefined ? '<span class="dim" style="font-size:11px">（外れた）</span>' : ""}</span><span class="mono">優勝 ${x.win}</span><span class="mono">平均 ${x.ev ? Math.round(x.sum / x.ev) : "-"}</span></div>`).join("") || `<p class="muted" style="font-size:13px">終了した大会がまだありません</p>`}
-      </div>
-      <button class="btn2" style="margin-top:8px" data-act="go" data-v="record">通算成績・得意不得意を見る</button>
-      <div class="tiles" style="margin-top:16px">
-        <button class="tile wp span3 top-o" data-act="go" data-v="games"><div><p class="t" style="font-size:19px">ゲームマスタ</p><p class="capg">GAME MASTER</p></div></button>
-        <button class="tile span3" style="background:var(--bg2);border:1px solid var(--line)" data-act="go" data-v="gcfg"><div><p class="t" style="font-size:19px">グループ設定</p><p class="capg">CONFIG</p></div></button>
-      </div>
-    </div>
+  <div class="stripe"></div>
+  <p class="mono dim" style="margin:8px 0 0;font-size:11px;letter-spacing:2px">SQUAD</p>
+  <p style="font-size:26px;font-weight:600;margin:0 0 10px">${esc(g.name)}</p>
+  <div class="memstrip">${strip}</div>
+  <div class="hub4">
+    <button class="h4 h4-blue" data-act="${live ? "openActive" : "newEvent"}">
+      <span class="h4top"><span class="mono">01 / EVENT</span><span class="h4ico">⚄</span></span>
+      <span><span class="h4t">大会を開く</span>
+      <span class="h4s">${live ? `<span class="h4tag">開催中</span>${esc(live.title)}　${roundsOf(live).length}/${poolSize(live)}ゲーム${roundsOf(live).length ? `　首位 ${lead.map(x => esc(mname(x.id))).join("・")}` : ""}　→ 続きから` : "開催中の大会はありません　→ 新しい大会を始める"}</span></span></button>
+    <button class="h4 h4-light" style="border-top:4px solid var(--gold)" data-act="go" data-v="archive">
+      <span class="h4top"><span class="mono">02 / ARCHIVE</span><span class="h4ico">▤</span></span>
+      <span><span class="h4t">過去の大会</span>
+      <span class="h4s">確認・登録・通算成績　｜　${done.length}回${done.length ? `・最新 ${fmtYMD(Math.max(...done.map(e => e.startedAt)))}` : ""}</span></span></button>
+    <button class="h4 h4-light" style="border-top:4px solid var(--orange)" data-act="go" data-v="games">
+      <span class="h4top"><span class="mono">03 / GAME MASTER</span><span class="h4ico">◈</span></span>
+      <span><span class="h4t">ゲームマスタ</span>
+      <span class="h4s">${games.length}ゲーム　${catCount.map(x => `<span style="color:${x.c.color}">■</span>${esc(x.c.name)} ${x.n}`).join(" ")}${none ? ` <span style="color:#868E96">■</span>未分類 ${none}` : ""}</span></span></button>
+    <button class="h4 h4-dark" data-act="go" data-v="gcfg">
+      <span class="h4top"><span class="mono">04 / CONFIG</span><span class="h4ico">⚙</span></span>
+      <span><span class="h4t">グループ設定</span>
+      <span class="h4s">グループ名・パスワード・メンバー（${members.length}人）</span></span></button>
   </div>`;
+}
+
+/* ----- 過去の大会（一覧・通算） ----- */
+function viewArchive() {
+  const evs = groupEvents(S.groupId).filter(e => e.status === "done");
+  const tab = S.arTab || "list";
+  const tabs = `<div style="display:flex;gap:6px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+    <button class="ftab ${tab === "list" ? "on" : ""}" style="font-size:13px;padding:4px 14px" data-act="arTab" data-t="list">大会の一覧</button>
+    <button class="ftab ${tab === "record" ? "on" : ""}" style="font-size:13px;padding:4px 14px" data-act="arTab" data-t="record">通算成績</button>
+    <button class="btn2" style="margin-left:auto" data-act="newImport">＋ 過去の大会を登録</button></div>`;
+  const list = `<div class="list">
+    ${evs.map(e => { const w = standingsOf(e, roundsOf(e)).filter(x => x.rank === 1 && x.pts > 0); const d = new Date(e.startedAt);
+      return `<button class="rowcut" style="display:flex;align-items:stretch;text-align:left;background:var(--row);width:100%" data-act="openEvent" data-id="${e.id}">
+      <span class="wp" style="padding:5px 12px;text-align:center;min-width:80px;display:flex;flex-direction:column;justify-content:center"><span class="mono" style="font-size:10px;color:#6B6E74">${d.getFullYear()}</span><span class="mono" style="font-size:22px;line-height:1.1">${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}</span></span>
+      <span style="flex:1;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 18px 6px 14px;flex-wrap:wrap">
+        <span style="font-size:16px">${esc(e.title)}　<span class="muted" style="font-size:12px">${roundsOf(e).length}ゲーム</span></span>
+        <span style="display:flex;align-items:center;gap:6px;color:var(--gold);font-size:13px">${w.length ? `<span style="background:var(--gold);color:#2A1E00;font-size:10px;padding:0 6px">WINNER</span>${w.map(x => who(x.id, 20, false)).join(" ")}` : ""}</span></span></button>`; }).join("") || `<p class="muted">まだ終了した大会はありません。「＋ 過去の大会を登録」から昔の記録を入れられます</p>`}
+  </div>`;
+  return `${header("過去の大会 / ARCHIVE", "hub")}${tabs}${tab === "record" ? recordBody() : list}`;
 }
 
 /* ----- グループ設定 ----- */
@@ -592,7 +615,7 @@ function viewMenu() {
           <div style="background:var(--blue2);color:#fff;padding:8px 10px;font-size:15px;flex:1;display:flex;align-items:center">順位とゲームごとの結果</div></div>
       </button>
       <button class="tile wp span2 top-o" data-act="go" data-v="games"><div><p class="t" style="font-size:20px">ゲーム</p><p class="capg">MASTER</p></div></button>
-      <button class="tile wp span2" data-act="go" data-v="hub"><div><p class="t" style="font-size:20px">記録</p><p class="capg">ARCHIVE</p></div></button>
+      <button class="tile wp span2" data-act="go" data-v="archive"><div><p class="t" style="font-size:20px">記録</p><p class="capg">ARCHIVE</p></div></button>
       <button class="tile span2" data-act="go" data-v="record" style="background:var(--bg2);border:1px solid var(--line)"><div><p class="t" style="font-size:20px">通算</p><p class="capg">RECORD</p></div></button>
     </div>
   </div>`;
@@ -713,7 +736,7 @@ function viewStandings() {
     return `<tr class="click" data-act="editRound" data-id="${r.id}"><td><span class="mono dim" style="font-size:11px">${pad2(i + 1)}</span> ${esc(r.name)}${m > 1 ? ` <span class="bdg">点数${m}倍</span>` : ""}</td>${cells}</tr>`;
   }).join("");
   const dateTxt = fmtYMD(e.startedAt);
-  return `${header(ro ? `記録 / ${esc(e.title)}` : "集計 / STANDINGS", ro ? "hub" : "menu")}
+  return `${header(ro ? `記録 / ${esc(e.title)}` : "集計 / STANDINGS", ro ? "archive" : "menu")}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
     <span style="display:flex;align-items:center;gap:10px"><span class="wp mono" style="padding:4px 10px;font-size:16px">${dateTxt}</span><span class="muted" style="font-size:13px">${esc(e.title)}　${rs.length}ゲーム${done ? "" : "（開催中）"}</span></span>
     ${!ro ? `<button class="btn2 danger" data-act="finishEvent">大会を終了する</button>` : `<button class="btn2 danger" style="padding:4px 10px;font-size:12px" data-act="deleteEvent">この大会を削除</button>`}</div>
@@ -743,12 +766,13 @@ function recordStats(gid) {
   const order = Object.values(stat).sort((a, b) => b.win - a.win || avg(b) - avg(a));
   return { stat, order, done: groupEvents(gid).filter(e => e.status === "done").length };
 }
-function viewRecord() {
+function viewRecord() { return header("通算 / RECORD", S.eventId ? "menu" : "archive") + recordBody(); }
+function recordBody() {
   const { stat, order, done } = recordStats(S.groupId); const g = grp(); const inG = new Set(groupMembers(g));
   const sel = S.recMember && stat[S.recMember] ? S.recMember : (S.me && stat[S.me] ? S.me : order[0]?.id);
   const apt = sel ? Object.entries(stat[sel].games).map(([name, x]) => ({ name, n: x.n, v: x.s / x.n })).sort((a, b) => b.v - a.v) : [];
   const col = v => v >= .8 ? "var(--gold)" : v >= .4 ? "var(--blue)" : "var(--red)";
-  return `${header("通算 / RECORD", S.eventId ? "menu" : "hub")}
+  return `
   <p class="mono dim" style="margin:-6px 0 12px">${esc(g.name)}　TOTAL ${done} EVENTS（このグループの終了した大会のみ集計）</p>
   <div class="grid2" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)">
     <div>
@@ -792,7 +816,7 @@ function viewImport() {
     return `<span style="white-space:nowrap"><select class="rb ${rbClass(rk)}" data-chg="impRank" data-ri="${ri}" data-pid="${pid}">
       ${Array.from({ length: n }, (_, i) => `<option value="${i + 1}" ${rk === i + 1 ? "selected" : ""}>${i + 1}位</option>`).join("")}
       <option value="0" ${!rk ? "selected" : ""}>不参加</option></select> <span class="mono dim" style="font-size:11px">${pt ?? ""}</span></span>`; };
-  return `${header("過去の大会を登録 / IMPORT", "hub")}
+  return `${header("過去の大会を登録 / IMPORT", "archive")}
   <div>
     <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"><div>
       <div class="stripe"></div>
@@ -971,7 +995,7 @@ function afterRender() {
 /* ---------------- 操作 ---------------- */
 let toastT;
 function toast(msg) { let t = document.querySelector(".toast"); if (!t) { t = document.createElement("div"); t.className = "toast"; document.body.appendChild(t); } t.textContent = msg; clearTimeout(toastT); toastT = setTimeout(() => t.remove(), 2400); }
-function go(v) { S.view = v; S.err = ""; if (v !== "standings") S.viewEventId = null; window.scrollTo(0, 0); render(true); }
+function go(v) { if (v === "archive" && !["standings", "imp", "record", "result"].includes(S.view)) S.arTab = "list"; S.view = v; S.err = ""; if (v !== "standings") S.viewEventId = null; window.scrollTo(0, 0); render(true); }
 const touch = () => ({ [`events/${S.eventId}/updatedAt`]: now() });
 function newCode(taken = {}) {
   const cs = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let c;
@@ -1137,7 +1161,7 @@ const actions = {
     S.eventId = null; S.viewEventId = eid; S.stTab = "rank"; S.view = "standings"; toast("大会を終了しました"); render(true); },
   openEvent: d => { S.viewEventId = d.id; S.stTab = "rank"; S.view = "standings"; S.err = ""; window.scrollTo(0, 0); render(true); },
   deleteEvent: async () => { const e = evOf(S.viewEventId); if (!confirm(`「${e.title}」を削除しますか？（元に戻せません）`)) return;
-    await Store.update({ [`events/${S.viewEventId}`]: null }); toast("大会を削除しました"); go("hub"); },
+    await Store.update({ [`events/${S.viewEventId}`]: null }); toast("大会を削除しました"); go("archive"); },
   openProf: () => { const m = D().members?.[S.me]; if (!m) return; S.prof = { name: m.name, handle: m.handle || "", color: colorOf(S.me), icon: m.icon || null }; go("prof"); },
   profColor: d => { S.prof.color = d.c; render(true); },
   profIconClear: () => { S.prof.icon = null; render(true); },
@@ -1163,6 +1187,7 @@ const actions = {
   setupCat: d => { const g = grp(); const items = groupGames(g).filter(x => d.k === "none" ? !catOf(g, x.cat) : x.cat === d.k).map(x => x.id);
     const st = S.setup; const full = items.every(id => st.games.includes(id));
     st.games = full ? st.games.filter(id => !items.includes(id)) : [...new Set(st.games.concat(items))]; render(true); },
+  arTab: d => { S.arTab = d.t; render(true); },
   recSel: d => { S.recMember = d.id; render(true); },
   copyUrl: async () => { const v = document.getElementById("joinUrl").value; try { await navigator.clipboard.writeText(v); toast("リンクをコピーしました"); } catch { document.getElementById("joinUrl").select(); toast("選択したのでコピーしてください"); } },
   /* 過去の大会の登録 */
