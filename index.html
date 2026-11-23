@@ -81,6 +81,33 @@ tr.click{cursor:pointer} tr.click:hover td{background:rgba(255,255,255,.04)}
 .whon{display:inline-flex;flex-direction:column;line-height:1.2;min-width:0}
 .hdl{font-family:var(--mono);font-size:10px;color:#8A8D93;font-weight:400}
 .wp .hdl{color:#6B6E74}
+.podium{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.wincard{grid-column:span 2;background:var(--gold);color:#2A1E00;padding:12px 14px;clip-path:polygon(0 0,100% 0,100% 82%,94% 100%,0 100%)}
+.wincard .you{background:#2A1E00;color:var(--gold)}
+@media (max-width:520px){.wincard{grid-column:1/-1}}
+.logbox{max-height:max(260px,calc(100vh - 400px));overflow:auto;border:1px solid #34373C}
+table.log{border-collapse:separate;border-spacing:0;min-width:100%}
+table.log th{position:sticky;top:0;background:var(--bg2);z-index:2;color:var(--text);font-size:13px;padding:8px 8px 6px;white-space:nowrap}
+table.log td{padding:7px 8px;white-space:nowrap;border-top:1px solid #34373C;vertical-align:top}
+table.log .pts{font-family:var(--mono);font-size:18px}
+table.log .pts small{font-size:11px;margin-left:1px}
+table.log .cum{font-family:var(--mono);font-size:10px;color:#6B6E74;margin-top:1px}
+table.log td.wincell{background:rgba(242,193,78,.12)}
+table.log td.wincell .pts{color:var(--gold)}
+.gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.gcard{text-align:left;background:var(--row);padding:10px 12px;color:var(--text);border-top:3px solid transparent}
+.gcard:hover{filter:brightness(1.1)}
+.gcard.on{background:var(--panel);color:var(--ink);border-top-color:var(--orange);clip-path:polygon(0 0,100% 0,100% 82%,93% 100%,0 100%)}
+.gcard.new{border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--sub);min-height:96px;background:transparent}
+.avs{display:flex}.avs .av{margin-right:-6px;border-width:2px}
+.ftab{border:1px solid var(--line);color:#C4C7CC;padding:3px 10px;font-size:12px;display:inline-flex;align-items:center;gap:5px}
+.ftab.on{background:var(--panel);color:var(--ink);border-color:var(--panel)}
+.sq{display:inline-block;width:9px;height:9px}
+.catpick{border:1px solid var(--cc);color:var(--text);padding:3px 10px;font-size:12px}
+.catpick.on{background:var(--cc);color:#fff}.catpick.part{background:color-mix(in srgb,var(--cc) 35%,transparent)}
+.cchip{border-left:3px solid var(--cc);background:color-mix(in srgb,var(--cc) 20%,transparent);padding:1px 6px;font-size:12px}
+table.master td{padding:4px 5px;vertical-align:middle}
+.openlink{display:inline-block;color:#fff;font-size:13px;padding:5px 12px;margin-left:8px;text-decoration:none}
 .swap{border:1px solid var(--line);color:#C4C7CC;padding:0 5px;font-size:10px}.swap:hover{border-color:var(--sub)}
 .rb{display:inline-block;min-width:38px;text-align:center;padding:1px 6px;font-size:12px;border:0;font-family:inherit;line-height:1.6}
 select.rb{appearance:none;-webkit-appearance:none;cursor:pointer;padding:2px 8px}
@@ -161,7 +188,7 @@ function setPath(obj, path, val) {
 /* ---------------- 画面の状態 ---------------- */
 const S = {
   view: "access", groupId: null, eventId: null, me: null,
-  accessCode: "", accessPick: null, remember: true,
+  accessCode: "", accessGroup: null, unlocked: {}, gfilter: "all", accessPick: null, remember: true,
   gnew: null, setup: null, imp: null, draft: null, editRound: null, stTab: "rank",
   viewEventId: null, recMember: null, drawing: null, err: ""
 };
@@ -269,7 +296,7 @@ function header(tagText, back) {
   return `<div class="hd"><div class="l">
       ${back ? `<button class="ico" data-act="go" data-v="${back}" aria-label="戻る">←</button>` : ""}
       <span class="tag">${tagText}</span>
-      ${g ? `<span class="mono dim">${esc(g.name)} · CODE ${esc(g.code)}</span>` : ""}
+      ${g ? `<span class="mono dim">${esc(g.name)}</span>` : ""}
     </div><div class="r">
       ${prog}
       <span class="mono dim">SYS.${fmtDateTime(now())}</span>
@@ -279,46 +306,61 @@ function header(tagText, back) {
     </div></div>`;
 }
 
-/* ----- 入室 ----- */
+/* ----- 入室（グループ一覧 → パスワード → 名前） ----- */
+const DEFAULT_CATS = [
+  { id: "bga", name: "BGA", color: "#15AABF", order: 0 },
+  { id: "switch", name: "Switch", color: "#E64980", order: 1 },
+  { id: "site", name: "個別サイト", color: "#F2C14E", order: 2 },
+  { id: "real", name: "実物（対面）", color: "#2F9E44", order: 3 }
+];
+const catsOf = g => g?.categories ? Object.entries(g.categories).map(([id, c]) => ({ id, ...c })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)) : DEFAULT_CATS;
+const catOf = (g, cid) => catsOf(g).find(c => c.id === cid) || null;
+const catChip = (c, n) => `<span class="cchip" style="--cc:${c ? c.color : "#868E96"}">${esc(c ? c.name : "未分類")}${n !== undefined ? ` <span class="mono">${n}</span>` : ""}</span>`;
+async function hashPass(gid, pw) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`gamenight:${gid}:${pw}`));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function groupLastAt(gid) { const evs = groupEvents(gid); return evs.length ? Math.max(...evs.map(e => e.updatedAt || e.startedAt || 0)) : (grpOf(gid)?.createdAt || 0); }
 function viewAccess() {
-  const code = S.accessCode.toUpperCase();
-  const gid = D().codes?.[code]; const g = gid && grpOf(gid);
-  let info = "";
-  if (code.length >= 4) {
-    if (g) {
-      const evs = groupEvents(gid); const act = g.activeEvent && evOf(g.activeEvent);
-      info = `<div style="margin-top:12px;border-left:3px solid var(--blue);background:var(--dark);padding:8px 12px">
-        <p class="cap" style="margin:0">SQUAD FOUND</p>
-        <p style="margin:2px 0 0;font-size:16px">${esc(g.name)}　<span class="muted" style="font-size:13px">メンバー${groupMembers(g).length}人・大会${evs.length}回</span></p>
-        <p class="muted" style="margin:0;font-size:13px">${act ? `開催中：${esc(act.title)}（${roundsOf(act).length} / ${poolSize(act)} ゲーム）` : "開催中の大会はありません"}</p></div>`;
-    } else info = `<p class="err">このコードのグループは見つかりません</p>`;
+  const groups = Object.entries(D().groups || {}).map(([id, g]) => ({ id, ...g })).sort((a, b) => groupLastAt(b.id) - groupLastAt(a.id));
+  const gid = S.accessGroup; const g = gid && grpOf(gid);
+  const unlocked = g && S.unlocked[gid];
+  const cards = groups.map((x, i) => {
+    const evs = groupEvents(x.id); const act = x.activeEvent && evOf(x.activeEvent) && evOf(x.activeEvent).status !== "done";
+    const last = evs.length ? fmtYMD(Math.max(...evs.map(e => e.startedAt))) : "-";
+    const on = x.id === gid;
+    return `<button class="gcard ${on ? "on" : ""}" data-act="pickGroup" data-id="${x.id}">
+      <span style="display:flex;justify-content:space-between;align-items:center"><span class="mono" style="font-size:11px;color:#8A8D93;letter-spacing:1px">SQUAD-${pad2(i + 1)}</span><span style="font-size:12px">${x.passHash ? "🔒" : '<span style="color:#F27C7C">未設定</span>'}</span></span>
+      <span style="display:block;font-size:19px;font-weight:600;margin:2px 0 4px">${esc(x.name)}</span>
+      <span class="avs">${groupMembers(x).slice(0, 8).map(id => avatar(id, 22)).join("")}</span>
+      <span style="display:block;font-size:11px;margin-top:4px" class="${on ? "" : "muted"}">最終 ${last}　大会${evs.length}回${act ? '　<b style="color:var(--blue)">開催中</b>' : ""}</span></button>`;
+  }).join("");
+  let step2 = "";
+  if (g) {
+    if (unlocked) step2 = `<div class="row" style="color:var(--green)">✓ ロックを解除しました</div>`;
+    else if (!g.passHash) step2 = `<p class="muted" style="font-size:12px;margin:0 0 6px">このグループはまだパスワードがありません。最初に入る人が設定してください（4文字以上）</p>
+        <input class="field mono" type="password" id="pwNew" placeholder="新しいパスワード" autocomplete="new-password">
+        <input class="field mono" type="password" id="pwNew2" placeholder="もう一度入力" autocomplete="new-password" style="margin-top:6px">
+        <div style="margin-top:8px"><button class="btn" data-act="setFirstPass">設定して解除</button></div>`;
+    else step2 = `<div class="wp top-o cut" style="padding:8px 14px"><input id="pwInput" class="mono" type="password" autocomplete="current-password" placeholder="パスワード"
+          style="width:100%;border:0;background:transparent;font-size:24px;letter-spacing:4px;outline:none;color:var(--ink)"></div>
+        <div style="margin-top:8px"><button class="btn" data-act="unlock">解除 / UNLOCK</button></div>`;
   }
-  const tiles = g ? groupMembers(g).map(id => `<button class="ptile ${S.accessPick === id ? "on" : ""}" data-act="pick" data-id="${id}">
+  const tiles = unlocked ? groupMembers(g).map(id => `<button class="ptile ${S.accessPick === id ? "on" : ""}" data-act="pick" data-id="${id}">
         <span class="n" style="font-size:16px">${who(id, 34)}</span></button>`).join("") : "";
-  return `${header("入室 / ACCESS", null)}
-  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)">
-    <div>
-      <div class="stripe"></div>
-      <p class="cap" style="margin-top:12px">STEP 1　GROUP CODE</p>
-      <div class="wp top-o cut" style="padding:10px 14px">
-        <input id="codeInput" class="mono" maxlength="6" autocomplete="off" placeholder="K7QD" value="${esc(code)}"
-          style="width:100%;border:0;background:transparent;font-size:32px;letter-spacing:8px;outline:none;color:var(--ink);text-transform:uppercase">
-      </div>
-      ${info}
-      <div style="margin-top:22px">
-        <p class="cap">NEW SQUAD</p>
-        <button class="btn2" data-act="newGroup">＋ 新しいグループを作る</button>
-      </div>
-    </div>
-    <div>
-      <p class="cap">STEP 2　SELECT PLAYER</p>
-      ${g ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${tiles}</div>
-        <label class="chk" style="margin-top:12px"><input type="checkbox" data-chg="remember" ${S.remember ? "checked" : ""}> この端末で次回から自動で入室する</label>
-        <div style="margin-top:12px"><button class="btn" data-act="enter">入室 / ENTER</button></div>
-        <p class="err">${esc(S.err)}</p>`
-      : `<div class="row" style="color:var(--sub)">グループのコードを入れると、メンバーの名前が表示されます</div>`}
-    </div>
-  </div>`;
+  return `${header(`<span class="mono">${esc(SITE_NAME)}</span> / SELECT SQUAD`, null)}
+  <div class="stripe"></div>
+  <p class="cap" style="margin-top:12px">STEP 1　SELECT SQUAD</p>
+  <div class="gcards">${cards}<button class="gcard new" data-act="newGroup">＋ 新しいグループを作る</button></div>
+  ${g ? `<div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);margin-top:18px">
+    <div><p class="cap">STEP 2　PASSWORD（${esc(g.name)}）</p>${step2}</div>
+    <div><p class="cap">STEP 3　SELECT PLAYER</p>
+      ${unlocked ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${tiles}</div>
+        <label class="chk" style="margin-top:12px"><input type="checkbox" data-chg="remember" ${S.remember ? "checked" : ""}> この端末で次回から自動で入室する（パスワードも省略）</label>
+        <div style="margin-top:12px"><button class="btn" data-act="enter">入室 / ENTER</button></div>`
+      : `<div class="row" style="color:var(--sub)">パスワードを解除すると、メンバーの名前が表示されます</div>`}
+    </div></div>` : `<p class="muted" style="margin-top:14px">入るグループを選んでください</p>`}
+  <p class="err">${esc(S.err)}</p>`;
 }
 
 /* ----- グループを作る ----- */
@@ -329,6 +371,9 @@ function viewGroupNew() {
     <div>
       <p class="cap">SQUAD NAME</p>
       <input class="field" data-inp="gnew.name" value="${esc(st.name)}" placeholder="いつもの4人">
+      <p class="cap" style="margin-top:16px">PASSWORD（4文字以上・入室に使います）</p>
+      <input class="field mono" type="password" data-inp="gnew.pw" value="${esc(st.pw)}" autocomplete="new-password" placeholder="パスワード">
+      <input class="field mono" type="password" data-inp="gnew.pw2" value="${esc(st.pw2)}" autocomplete="new-password" placeholder="もう一度入力" style="margin-top:6px">
       <p class="cap" style="margin-top:16px">MEMBERS</p>
       <div class="list">
         ${st.members.map((n, i) => `<div class="row" style="padding:6px 10px"><span>${esc(n)}</span><button class="btn2" style="padding:2px 8px;font-size:12px" data-act="gnewDel" data-i="${i}">外す</button></div>`).join("") || `<p class="muted" style="font-size:13px">メンバーを追加してください（2人以上）</p>`}
@@ -336,12 +381,12 @@ function viewGroupNew() {
       <div style="display:flex;gap:6px;margin-top:8px"><input class="field" id="gnewMember" placeholder="名前（例：たろう）"><button class="btn2" data-act="gnewAdd">追加</button></div>
     </div>
     <div>
-      <p class="cap">GAME LIST</p>
-      <label class="chk row" style="padding:10px 12px"><input type="checkbox" data-chg="gnewSeed" ${st.seed ? "checked" : ""}> 前回のExcelの17ゲーム（自由枠・倍率込み）を候補に入れる</label>
-      <p class="muted" style="font-size:12px">あとから「ゲーム候補」で追加・削除・倍率の変更ができます。</p>
+      <p class="cap">GAME MASTER</p>
+      <label class="chk row" style="padding:10px 12px"><input type="checkbox" data-chg="gnewSeed" ${st.seed ? "checked" : ""}> 前回のExcelの17ゲーム（自由枠・倍率込み）を登録する</label>
+      <p class="muted" style="font-size:12px">分類（BGA・Switch・個別サイト・実物（対面））は最初から用意されます。あとから「ゲームマスタ」で分類・URL・メモの設定や追加ができます。</p>
     </div>
   </div>
-  <div style="margin-top:18px"><button class="btn gold" data-act="createGroup">グループを作成してコードを発行</button><p class="err">${esc(S.err)}</p></div>`;
+  <div style="margin-top:18px"><button class="btn gold" data-act="createGroup">グループを作成</button><p class="err">${esc(S.err)}</p></div>`;
 }
 
 /* ----- グループのホーム ----- */
@@ -363,15 +408,18 @@ function viewHub() {
   <div class="grid2" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)">
     <div>
       <div class="stripe"></div>
-      <p class="mono dim" style="margin:8px 0 0;font-size:11px">SQUAD / ${esc(g.code)}</p>
+      <p class="mono dim" style="margin:8px 0 0;font-size:11px">SQUAD</p>
       <p style="font-size:24px;font-weight:600;margin:0 0 12px">${esc(g.name)}</p>
       <p class="cap">ACTIVE EVENT</p>
       ${actHtml}
       <p class="cap" style="margin-top:16px">ARCHIVE（このグループの過去の大会）</p>
       <div class="list">
-        ${done.map(e => `<button class="row rowcut" style="text-align:left;padding:8px 12px" data-act="openEvent" data-id="${e.id}">
-          <span><span class="mono dim" style="font-size:12px">${fmtYMD(e.startedAt)}</span>　${esc(e.title)}${e.imported ? ' <span style="font-size:10px;background:#4A4D53;padding:0 4px">Excelから登録</span>' : ""}</span>
-          <span style="color:var(--gold);font-size:13px;margin-right:10px">優勝 ${esc(winnersText(e) || "-")}</span></button>`).join("") || `<p class="muted" style="font-size:13px">まだ終了した大会はありません</p>`}
+        ${done.map(e => { const w = standingsOf(e, roundsOf(e)).filter(x => x.rank === 1 && x.pts > 0); const d = new Date(e.startedAt);
+          return `<button class="rowcut" style="display:flex;align-items:stretch;text-align:left;background:var(--row);width:100%" data-act="openEvent" data-id="${e.id}">
+          <span class="wp" style="padding:5px 12px;text-align:center;min-width:80px;display:flex;flex-direction:column;justify-content:center"><span class="mono" style="font-size:10px;color:#6B6E74">${d.getFullYear()}</span><span class="mono" style="font-size:22px;line-height:1.1">${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}</span></span>
+          <span style="flex:1;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 18px 6px 14px;flex-wrap:wrap">
+            <span style="font-size:16px">${esc(e.title)}</span>
+            <span style="display:flex;align-items:center;gap:6px;color:var(--gold);font-size:13px">${w.length ? `<span style="background:var(--gold);color:#2A1E00;font-size:10px;padding:0 6px">WINNER</span>${w.map(x => who(x.id, 20, false)).join(" ")}` : ""}</span></span></button>`; }).join("") || `<p class="muted" style="font-size:13px">まだ終了した大会はありません</p>`}
       </div>
       <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
         <button class="btn2" data-act="newImport">過去の大会を登録</button>
@@ -385,7 +433,7 @@ function viewHub() {
       </div>
       <button class="btn2" style="margin-top:8px" data-act="go" data-v="record">通算成績・得意不得意を見る</button>
       <div class="tiles" style="margin-top:16px">
-        <button class="tile wp span3 top-o" data-act="go" data-v="games"><div><p class="t" style="font-size:19px">ゲーム候補</p><p class="capg">GAMES</p></div></button>
+        <button class="tile wp span3 top-o" data-act="go" data-v="games"><div><p class="t" style="font-size:19px">ゲームマスタ</p><p class="capg">GAME MASTER</p></div></button>
         <button class="tile span3" style="background:var(--bg2);border:1px solid var(--line)" data-act="go" data-v="gcfg"><div><p class="t" style="font-size:19px">グループ設定</p><p class="capg">CONFIG</p></div></button>
       </div>
     </div>
@@ -401,9 +449,13 @@ function viewGroupCfg() {
       <div class="stripe"></div>
       <p class="cap" style="margin-top:10px">SQUAD NAME</p>
       <input class="field" value="${esc(g.name)}" data-chg="groupName">
-      <p class="cap" style="margin-top:14px">GROUP CODE（固定）</p>
-      <div class="wp top-o mono" style="padding:8px 12px;font-size:28px;letter-spacing:6px">${esc(g.code)}</div>
-      <p class="muted" style="font-size:12px;margin-top:6px">このコードとリンクは大会が変わっても同じです。</p>
+      <p class="cap" style="margin-top:16px">PASSWORD（変更）</p>
+      <input class="field mono" type="password" id="pwCur" placeholder="今のパスワード" autocomplete="current-password">
+      <input class="field mono" type="password" id="pwNew" placeholder="新しいパスワード（4文字以上）" autocomplete="new-password" style="margin-top:6px">
+      <input class="field mono" type="password" id="pwNew2" placeholder="新しいパスワードをもう一度" autocomplete="new-password" style="margin-top:6px">
+      <div style="margin-top:8px"><button class="btn2" data-act="changePass">パスワードを変更</button></div>
+      <p class="muted" style="font-size:12px;margin-top:6px">変更すると、「自動で入室」にしていた端末も次回は新しいパスワードが必要になります。</p>
+      <p class="err">${esc(S.err)}</p>
     </div>
     <div>
       <p class="cap">MEMBERS</p>
@@ -416,38 +468,64 @@ function viewGroupCfg() {
       ${dupWarn(groupMembers(g))}
       <div style="display:flex;gap:6px;margin-top:8px"><input class="field" id="cfgMember" placeholder="名前を追加（例：じろう）"><button class="btn2" data-act="addMember">追加</button></div>
       <p class="muted" style="font-size:12px">名前・アイコン・色・@IDは、本人が右上の自分のアイコン（プロフィール）から変更します。名前を変えても過去の記録・通算は引き継がれ、外した人の過去の記録も残ります。</p>
-      <p class="err">${esc(S.err)}</p>
     </div>
   </div>`;
 }
 
-/* ----- ゲーム候補（グループごと） ----- */
+/* ----- ゲームマスタ（グループごと） ----- */
 function viewGames() {
   const g = grp(); const e = curEv(); const played = new Set(roundsOf(e).map(r => r.gameId));
-  return `${header("ゲーム候補 / GAMES", e ? "menu" : "hub")}
-  <p class="cap">GAME LIST${e ? "（チェック＝今の大会の抽選に入れる）" : ""}</p>
-  <div class="list">
-  ${groupGames(g).map(x => `<div class="row" style="padding:6px 10px;flex-wrap:wrap">
-    <span style="display:flex;align-items:center;gap:8px">${e ? `<input type="checkbox" style="width:18px;height:18px;accent-color:var(--blue)" data-chg="poolToggle" data-id="${x.id}" ${e.pool?.[x.id] ? "checked" : ""} ${played.has(x.id) ? "disabled" : ""}>` : ""}
-      ${esc(x.name)}${x.isFree ? '<span class="dim" style="font-size:12px">（自由枠）</span>' : ""}${played.has(x.id) ? '<span class="dim" style="font-size:12px">（済）</span>' : ""}</span>
-    <span style="display:flex;gap:6px;align-items:center">
-      <select class="field" style="width:auto;padding:4px 6px" data-chg="mult" data-id="${x.id}">${[1, 2, 3].map(m => `<option value="${m}" ${(x.mult || 1) === m ? "selected" : ""}>×${m}</option>`).join("")}</select>
-      <button class="btn2" style="padding:4px 8px;font-size:12px" data-act="delGame" data-id="${x.id}">削除</button></span></div>`).join("") || `<p class="muted">まだゲームがありません</p>`}
-  </div>
-  <p class="cap" style="margin-top:14px">ADD GAME</p>
-  <div style="display:flex;gap:6px;flex-wrap:wrap">
-    <input class="field" id="gName" placeholder="ゲーム名（例：ニムト）" style="flex:1;min-width:160px">
-    <select class="field" id="gMult" style="width:auto"><option value="1">×1</option><option value="2">×2</option><option value="3">×3</option></select>
-    <label class="chk"><input type="checkbox" id="gFree">自由枠</label>
-    <button class="btn2" data-act="addGame">追加</button></div>
-  <p class="err">${esc(S.err)}</p>`;
+  const cats = catsOf(g); const all = groupGames(g);
+  const f = S.gfilter || "all";
+  const list = all.filter(x => f === "all" ? true : f === "none" ? !catOf(g, x.cat) : x.cat === f);
+  const cnt = cid => all.filter(x => cid === "none" ? !catOf(g, x.cat) : x.cat === cid).length;
+  const tab = (key, label, color) => `<button class="ftab ${f === key ? "on" : ""}" data-act="gfilter" data-f="${key}">${color ? `<span class="sq" style="background:${color}"></span>` : ""}${esc(label)} <span class="mono">${key === "all" ? all.length : cnt(key)}</span></button>`;
+  const catSel = x => `<select class="field" style="padding:3px 4px;font-size:12px;border-left:4px solid ${catOf(g, x.cat)?.color || "#868E96"}" data-chg="gcat" data-id="${x.id}">
+      <option value="">未分類</option>${cats.map(c => `<option value="${c.id}" ${x.cat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>`;
+  return `${header("ゲームマスタ / GAME MASTER", e ? "menu" : "hub")}
+  <div style="display:flex;gap:6px;flex-wrap:wrap">${tab("all", "すべて")}${cats.map(c => tab(c.id, c.name, c.color)).join("")}${tab("none", "未分類", "#868E96")}</div>
+  <div style="overflow-x:auto;margin-top:10px"><table class="master">
+    <tr>${e ? "<th>抽選</th>" : ""}<th style="min-width:170px">ゲーム名</th><th>分類</th><th>倍率</th><th style="min-width:180px">URL</th><th style="min-width:160px">メモ</th><th></th></tr>
+    ${list.map(x => `<tr>
+      ${e ? `<td><input type="checkbox" style="width:18px;height:18px;accent-color:var(--blue)" data-chg="poolToggle" data-id="${x.id}" ${e.pool?.[x.id] ? "checked" : ""} ${played.has(x.id) ? "disabled" : ""} title="今の大会の抽選に入れる"></td>` : ""}
+      <td><input class="field" style="padding:4px 6px" value="${esc(x.name)}" data-chg="gfield" data-k="name" data-id="${x.id}">${x.isFree ? '<span class="dim" style="font-size:11px">自由枠</span>' : ""}${played.has(x.id) ? '<span class="dim" style="font-size:11px">（済）</span>' : ""}</td>
+      <td>${catSel(x)}</td>
+      <td><select class="field" style="width:auto;padding:3px 4px" data-chg="mult" data-id="${x.id}">${[1, 2, 3].map(m => `<option value="${m}" ${(x.mult || 1) === m ? "selected" : ""}>×${m}</option>`).join("")}</select></td>
+      <td><input class="field mono" style="padding:4px 6px;font-size:12px" value="${esc(x.url || "")}" placeholder="https://…" data-chg="gfield" data-k="url" data-id="${x.id}"></td>
+      <td><input class="field" style="padding:4px 6px;font-size:12px" value="${esc(x.memo || "")}" placeholder="ルールの補足など" data-chg="gfield" data-k="memo" data-id="${x.id}"></td>
+      <td><button class="btn2" style="padding:3px 8px;font-size:12px" data-act="delGame" data-id="${x.id}">削除</button></td></tr>`).join("") || `<tr><td colspan="7" class="muted">この分類のゲームはありません</td></tr>`}
+  </table></div>
+  <p class="muted" style="font-size:11px;margin:4px 0 0">名前・URL・メモは入力欄から離れると保存されます。</p>
+  <div class="grid2" style="grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);margin-top:16px">
+    <div>
+      <p class="cap">ADD GAME</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input class="field" id="gName" placeholder="ゲーム名（例：ニムト）" style="flex:1;min-width:160px">
+        <select class="field" id="gCat" style="width:auto"><option value="">未分類</option>${cats.map(c => `<option value="${c.id}" ${f === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
+        <select class="field" id="gMult" style="width:auto"><option value="1">×1</option><option value="2">×2</option><option value="3">×3</option></select>
+        <label class="chk"><input type="checkbox" id="gFree">自由枠</label>
+        <button class="btn2" data-act="addGame">追加</button></div>
+      <p class="err">${esc(S.err)}</p>
+    </div>
+    <div>
+      <p class="cap">CATEGORIES（分類の管理）</p>
+      <div class="list" style="gap:4px">
+        ${cats.map(c => `<div class="row" style="padding:5px 8px;border-left:4px solid ${c.color}">
+          <input class="field" style="padding:3px 6px;flex:1" value="${esc(c.name)}" data-chg="catName" data-id="${c.id}">
+          <span style="display:flex;gap:3px">${PALETTE.concat(["#15AABF"]).filter((v, i, a) => a.indexOf(v) === i).map(col => `<button data-act="catColor" data-id="${c.id}" data-c="${col}" aria-label="色" style="width:14px;height:14px;border-radius:50%;background:${col};${c.color === col ? "outline:2px solid #fff;outline-offset:1px" : ""}"></button>`).join("")}</span>
+          <button class="btn2" style="padding:2px 6px;font-size:11px" data-act="catDel" data-id="${c.id}">削除</button></div>`).join("")}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px"><input class="field" id="catNew" placeholder="分類を追加（例：スマホアプリ）"><button class="btn2" data-act="catAdd">追加</button></div>
+    </div>
+  </div>`;
 }
 
 /* ----- 新しい大会 ----- */
 function viewEventNew() {
-  const g = grp(), st = S.setup;
+  const g = grp(), st = S.setup; const all = groupGames(g); const cats = catsOf(g);
+  const groups = cats.map(c => ({ key: c.id, c, items: all.filter(x => x.cat === c.id) })).concat([{ key: "none", c: null, items: all.filter(x => !catOf(g, x.cat)) }]).filter(x => x.items.length);
   return `${header("新しい大会 / NEW EVENT", "hub")}
-  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)">
     <div>
       <p class="cap">EVENT TITLE</p>
       <input class="field" data-inp="setup.title" value="${esc(st.title)}">
@@ -457,9 +535,13 @@ function viewEventNew() {
       </div>
     </div>
     <div>
-      <p class="cap">GAME POOL（抽選に入れるゲーム）</p>
-      <div class="list" style="max-height:420px;overflow:auto">
-        ${groupGames(g).map(x => `<label class="chk row" style="padding:6px 10px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-chg="setupGame" data-id="${x.id}" ${st.games.includes(x.id) ? "checked" : ""}>${esc(x.name)}${multBadge(x.mult)}</span></label>`).join("") || `<p class="muted">ゲーム候補がありません。グループの「ゲーム候補」で追加してください</p>`}
+      <p class="cap">GAME POOL（抽選に入れるゲーム・分類ごとにまとめて選べます）</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        ${groups.map(x => { const sel = x.items.filter(i => st.games.includes(i.id)).length; const full = sel === x.items.length;
+          return `<button class="catpick ${full ? "on" : sel ? "part" : ""}" style="--cc:${x.c ? x.c.color : "#868E96"}" data-act="setupCat" data-k="${x.key}">${full ? "☑" : sel ? "◪" : "☐"} ${esc(x.c ? x.c.name : "未分類")}（${sel}/${x.items.length}）</button>`; }).join("")}
+      </div>
+      <div class="list" style="max-height:400px;overflow:auto">
+        ${groups.map(x => `<p class="capg" style="margin:6px 0 2px;color:${x.c ? x.c.color : "#868E96"}">${esc(x.c ? x.c.name : "未分類")}</p>` + x.items.map(i => `<label class="chk row" style="padding:5px 10px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-chg="setupGame" data-id="${i.id}" ${st.games.includes(i.id) ? "checked" : ""}>${esc(i.name)}${multBadge(i.mult)}</span></label>`).join("")).join("") || `<p class="muted">ゲームがありません。グループの「ゲームマスタ」で追加してください</p>`}
       </div>
       <p class="muted" style="font-size:12px">選択中 ${st.games.length} ゲーム</p>
     </div>
@@ -507,11 +589,9 @@ function viewMenu() {
         <div style="background:var(--blue);color:#fff;padding:14px;clip-path:polygon(0 0,100% 0,100% 100%,6% 100%,0 80%)"><span style="font-size:24px;font-weight:600">集計</span></div>
         <div style="display:flex;flex-direction:column">
           <div style="background:var(--bg2);font-size:12px;padding:3px 10px;letter-spacing:2px">STANDINGS</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;flex:1">
-            <div style="background:var(--blue2);color:#fff;padding:8px 10px;font-size:16px;border-right:1px solid var(--blue)">今日の順位</div>
-            <div style="background:var(--blue2);color:#fff;padding:8px 10px;font-size:16px">ゲーム別</div></div></div>
+          <div style="background:var(--blue2);color:#fff;padding:8px 10px;font-size:15px;flex:1;display:flex;align-items:center">順位とゲームごとの結果</div></div>
       </button>
-      <button class="tile wp span2 top-o" data-act="go" data-v="games"><div><p class="t" style="font-size:20px">候補</p><p class="capg">GAMES</p></div></button>
+      <button class="tile wp span2 top-o" data-act="go" data-v="games"><div><p class="t" style="font-size:20px">ゲーム</p><p class="capg">MASTER</p></div></button>
       <button class="tile wp span2" data-act="go" data-v="hub"><div><p class="t" style="font-size:20px">記録</p><p class="capg">ARCHIVE</p></div></button>
       <button class="tile span2" data-act="go" data-v="record" style="background:var(--bg2);border:1px solid var(--line)"><div><p class="t" style="font-size:20px">通算</p><p class="capg">RECORD</p></div></button>
     </div>
@@ -540,7 +620,9 @@ function viewDraw() {
       <div class="wp cut top-o ${S.drawing ? "flash" : ""}" style="margin-top:8px;padding:18px 18px 16px">
         <p class="capg">${S.drawing ? "SCANNING…" : cur ? "TARGET LOCKED" : "STANDBY"}</p>
         <p style="font-size:32px;font-weight:600;margin:4px 0">${shown ? (shown.name ? esc(shown.name) : "自由枠") : "―"}</p>
-        ${cur && !S.drawing ? `<span style="background:var(--ink);color:var(--panel);font-size:12px;padding:2px 8px">倍率 ×${cur.mult || 1}</span>` : ""}
+        ${cur && !S.drawing ? (() => { const gm = grp()?.games?.[cur.gameId];
+          return `${gm?.memo ? `<p style="font-size:13px;color:#6B6E74;margin:0 0 8px">メモ：${esc(gm.memo)}</p>` : ""}<span style="background:var(--ink);color:var(--panel);font-size:12px;padding:2px 8px">倍率 ×${cur.mult || 1}</span>
+            ${gm?.url && /^https?:\/\//.test(gm.url) ? `<a href="${esc(gm.url)}" target="_blank" rel="noopener" class="openlink" style="background:${catOf(grp(), gm.cat)?.color || "var(--blue)"}">↗ 遊ぶページを開く</a>` : ""}`; })() : ""}
       </div>
       ${free}
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
@@ -602,30 +684,45 @@ function viewResult() {
 function viewStandings() {
   const id = S.viewEventId || S.eventId; const e = evOf(id);
   if (!e) return `${header("集計 / STANDINGS", "hub")}<p>大会が見つかりません</p>`;
-  const ro = !!S.viewEventId;
-  const st = withMoves(e); const rs = roundsOf(e); const ps = playersOf(e);
-  const tabs = `<span style="display:flex;gap:6px">
-     <button class="${S.stTab === "rank" ? "wp" : "btn2"}" style="padding:3px 12px" data-act="stTab" data-t="rank">${ro ? "最終順位" : "今日の順位"}</button>
-     <button class="${S.stTab === "game" ? "wp" : "btn2"}" style="padding:3px 12px" data-act="stTab" data-t="game">ゲーム別</button></span>`;
-  const cards = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">
-    ${st.map(x => `<div class="card ${x.rank === 1 ? "first" : ""}" style="${x.rank === 2 ? "border-top-color:#8DA2C0" : ""}">
-      <p style="margin:0">${rankBadge(x.rank, ro && x.rank === 1 ? "優勝" : undefined)} ${!ro && x.move > 0 ? `<span style="color:var(--green)">▲${x.move}</span>` : !ro && x.move < 0 ? `<span style="color:#F27C7C">▼${-x.move}</span>` : ""}</p>
-      <p style="font-size:15px;margin:6px 0 2px">${who(x.id, 26)}${youTag(x.id)}</p><p class="big">${x.pts}</p></div>`).join("")}</div>`;
-  const editable = !ro || e.status === "done";
-  const list = S.stTab === "rank" ? [...rs].reverse().slice(0, 3) : [...rs].reverse();
-  const rows = list.map((r, i) => {
-    const p = roundPoints(r); const best = Math.max(0, ...Object.values(p));
-    return `<tr class="click" data-act="editRound" data-id="${r.id}"><td class="mono dim">${pad2(rs.length - i)}</td><td>${esc(r.name)}${multBadge(r.mult)}</td>
-      ${ps.map(pid => `<td style="white-space:nowrap">${r.ranks?.[pid] > 0 ? `${rankBadge(r.ranks[pid])} <span class="mono dim" style="font-size:11px">${p[pid]}</span>` : '<span class="dim">-</span>'}</td>`).join("")}</tr>`;
+  const ro = !!S.viewEventId; const done = e.status === "done";
+  const st = withMoves(e); const rs = roundsOf(e);
+  const order = st.map(x => x.id);
+  const mv = x => !ro && x.move > 0 ? `<span style="color:var(--green);font-size:11px">▲${x.move}</span>` : !ro && x.move < 0 ? `<span style="color:#F27C7C;font-size:11px">▼${-x.move}</span>` : "";
+  const top = st.filter(x => x.rank === 1), rest = st.filter(x => x.rank > 1);
+  const winLabel = done ? "WINNER / 優勝" : "LEADER / 暫定1位";
+  const topCards = top.map(x => `<div class="wincard">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;letter-spacing:2px">${winLabel}</span><span class="mono" style="font-size:11px">RANK 01 ${mv(x)}</span></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px">${avatar(x.id, 46)}<div style="min-width:0"><div style="font-size:20px;font-weight:700;line-height:1.2">${esc(mname(x.id))}${youTag(x.id)}</div><div class="mono" style="font-size:11px">@${esc(handleOf(x.id))}</div></div>
+      <div class="mono" style="margin-left:auto;font-size:40px;line-height:1">${x.pts}<span style="font-size:13px">点</span></div></div></div>`).join("");
+  const restCards = rest.map(x => `<div class="card" style="border-top-color:${x.rank === 2 ? "#C4CBD6" : x.rank === 3 ? "#C98A55" : "#4A4D53"}">
+      <div style="display:flex;justify-content:space-between;align-items:center">${rankBadge(x.rank)}${mv(x)}</div>
+      <div style="margin-top:6px">${who(x.id, 24)}${youTag(x.id)}</div>
+      <div class="mono" style="font-size:24px;margin-top:2px">${x.pts}<span style="font-size:11px">点</span></div></div>`).join("");
+  // ゲームごと（昇順）＋累計
+  const cum = {}; order.forEach(p => cum[p] = 0);
+  const rows = rs.map((r, i) => {
+    const p = roundPoints(r); const best = Math.max(0, ...Object.values(p)); const m = r.mult || 1;
+    order.forEach(pid => { if (p[pid]) cum[pid] += p[pid]; });
+    const cells = order.map(pid => {
+      const rk = r.ranks?.[pid];
+      if (!(rk > 0)) return `<td><span class="dim" style="font-size:12px">不参加</span><div class="cum">累計 ${cum[pid]}</div></td>`;
+      const win = p[pid] === best && best > 0;
+      return `<td class="${win ? "wincell" : ""}"><span class="pts">+${p[pid]}<small>点</small></span> ${rankBadge(rk)}
+        <div class="cum">${m > 1 ? `${p[pid] / m}×${m}　` : ""}累計 ${cum[pid]}</div></td>`;
+    }).join("");
+    return `<tr class="click" data-act="editRound" data-id="${r.id}"><td><span class="mono dim" style="font-size:11px">${pad2(i + 1)}</span> ${esc(r.name)}${m > 1 ? ` <span class="bdg">点数${m}倍</span>` : ""}</td>${cells}</tr>`;
   }).join("");
-  const table = `<p class="cap" style="margin-top:16px">${S.stTab === "rank" ? "LATEST 3" : "OPERATION LOG"}<span class="dim" style="letter-spacing:0">　行をタップで修正</span></p>
-    <div style="overflow-x:auto"><table><tr><th style="width:42px">#</th><th>ゲーム</th>${ps.map(pid => `<th style="color:var(--text);font-size:13px">${who(pid, 20)}</th>`).join("")}</tr>${rows || `<tr><td colspan="${ps.length + 2}" class="muted">まだ結果がありません</td></tr>`}
-    ${S.stTab === "game" ? `<tr><td></td><td style="color:#8A8D93">合計点</td>${ps.map(pid => { const x = st.find(y => y.id === pid); return `<td class="mono" style="font-size:16px;${x?.rank === 1 ? "color:var(--gold)" : ""}">${x?.pts ?? 0}</td>`; }).join("")}</tr>
-      <tr><td></td><td style="color:#8A8D93">${ro ? "最終順位" : "現在の順位"}</td>${ps.map(pid => { const x = st.find(y => y.id === pid); return `<td>${rankBadge(x.rank, ro && x.rank === 1 ? "優勝" : undefined, true)}</td>`; }).join("")}</tr>` : ""}</table></div>`;
+  const dateTxt = fmtYMD(e.startedAt);
   return `${header(ro ? `記録 / ${esc(e.title)}` : "集計 / STANDINGS", ro ? "hub" : "menu")}
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">${tabs}
-    ${!ro ? `<button class="btn2 danger" data-act="finishEvent">大会を終了する</button>` : `<span class="muted" style="font-size:13px">${fmtYMD(e.startedAt)}${e.imported ? "（Excelから登録）" : ""}　<button class="btn2 danger" style="padding:2px 8px;font-size:12px" data-act="deleteEvent">この大会を削除</button></span>`}</div>
-  ${S.stTab === "rank" ? cards : ""}${editable ? table : ""}`;
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <span style="display:flex;align-items:center;gap:10px"><span class="wp mono" style="padding:4px 10px;font-size:16px">${dateTxt}</span><span class="muted" style="font-size:13px">${esc(e.title)}　${rs.length}ゲーム${done ? "" : "（開催中）"}</span></span>
+    ${!ro ? `<button class="btn2 danger" data-act="finishEvent">大会を終了する</button>` : `<button class="btn2 danger" style="padding:4px 10px;font-size:12px" data-act="deleteEvent">この大会を削除</button>`}</div>
+  <div class="podium">${topCards}${restCards}</div>
+  <p class="cap" style="margin-top:14px">GAME LOG（1ゲーム目から順に・行をタップで修正）</p>
+  <div class="logbox"><table class="log">
+    <thead><tr><th style="min-width:150px">ゲーム</th>${order.map(pid => `<th style="border-bottom:3px solid ${colorOf(pid)}">${who(pid, 20)}</th>`).join("")}</tr></thead>
+    <tbody>${rows || `<tr><td colspan="${order.length + 1}" class="muted">まだ結果がありません</td></tr>`}</tbody>
+  </table></div>`;
 }
 
 /* ----- 通算（グループ内） ----- */
@@ -696,8 +793,8 @@ function viewImport() {
       ${Array.from({ length: n }, (_, i) => `<option value="${i + 1}" ${rk === i + 1 ? "selected" : ""}>${i + 1}位</option>`).join("")}
       <option value="0" ${!rk ? "selected" : ""}>不参加</option></select> <span class="mono dim" style="font-size:11px">${pt ?? ""}</span></span>`; };
   return `${header("過去の大会を登録 / IMPORT", "hub")}
-  <div class="grid2" style="grid-template-columns:minmax(0,.85fr) minmax(0,1.6fr)">
-    <div>
+  <div>
+    <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"><div>
       <div class="stripe"></div>
       <p class="cap" style="margin-top:10px">EVENT</p>
       <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
@@ -709,7 +806,8 @@ function viewImport() {
         ${groupMembers(g).map(id => { const i = ps.indexOf(id); return `<button class="ptile ${i >= 0 ? "on" : ""}" style="padding:6px 10px" data-act="impPlayer" data-id="${id}">
           <span style="display:flex;align-items:center;gap:6px"><span class="mono" style="font-size:11px;color:#8A8D93">${i >= 0 ? `列${i + 1}` : "―"}</span>${who(id, 22)}</span></button>`; }).join("")}
       </div>
-      <p class="cap" style="margin-top:14px">NUMBERS（Excelの数字の意味）</p>
+      </div><div>
+      <p class="cap" style="margin-top:0">NUMBERS（Excelの数字の意味）</p>
       <div style="display:flex">
         <button class="${im.mode === "points" ? "wp" : "btn2"}" style="padding:4px 10px;font-size:13px" data-act="impMode" data-m="points">点数（高いほど上位）</button>
         <button class="${im.mode === "rank" ? "wp" : "btn2"}" style="padding:4px 10px;font-size:13px" data-act="impMode" data-m="rank">順位（小さいほど上位）</button>
@@ -718,8 +816,8 @@ function viewImport() {
       <textarea class="field mono" data-inp="imp.text" rows="7" style="font-size:12px;resize:vertical" placeholder="Excelで「ゲーム名＋参加者の列」の範囲をコピーして貼り付け（合計点の行も入れると答え合わせできます）">${esc(im.text)}</textarea>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn" data-act="impParse">読み取る</button><button class="btn2" data-act="impAddRow">＋ 1行ずつ手入力</button></div>
       <p class="muted" style="font-size:11px;margin-top:6px">2倍・3倍の行は自動で見分けます。見出しや空の行は読み飛ばし、空のセルは「不参加」になります。</p>
-    </div>
-    <div>
+    </div></div>
+    <div style="margin-top:16px">
       <p class="cap">PREVIEW（${rows.length}ゲーム）</p>
       ${rows.length ? `<div style="overflow-x:auto"><table class="imp">
         <tr><th style="min-width:130px">ゲーム</th><th>候補</th><th>倍率</th>${ps.map((p, ci) => `<th style="min-width:140px;vertical-align:bottom">
@@ -850,7 +948,7 @@ function viewLink() {
       <p class="cap" style="margin-top:10px">ACCESS LINK</p>
       <div style="display:flex;gap:6px"><input class="field mono" readonly value="${esc(url)}" id="joinUrl"><button class="btn" data-act="copyUrl">コピー</button></div>
       <p class="muted" style="font-size:13px;margin-top:10px">スマホのカメラでQRを読むか、リンクをDiscordに貼ってください。開いたら名前を選ぶだけで入室できます。このリンクは大会が変わっても使えます。</p>
-      <p class="mono dim" style="font-size:12px">${esc(g.name)}　｜　CODE ${esc(g.code)}</p>
+      <p class="mono dim" style="font-size:12px">${esc(g.name)}　｜　リンクを開いた人はパスワードを入れて入室します</p>
     </div>
   </div>`;
 }
@@ -889,6 +987,7 @@ function sampleGames() {
 }
 function enterGroup(gid, mid) {
   S.groupId = gid; S.me = mid; const g = grpOf(gid);
+  if (!g.categories) Store.update({ [`groups/${gid}/categories`]: Object.fromEntries(DEFAULT_CATS.map(c => [c.id, { name: c.name, color: c.color, order: c.order }])) });
   const act = g.activeEvent && evOf(g.activeEvent);
   if (act && act.status !== "done" && act.players?.[mid] !== undefined) { S.eventId = g.activeEvent; go("menu"); }
   else { S.eventId = null; go("hub"); }
@@ -896,29 +995,57 @@ function enterGroup(gid, mid) {
 
 const actions = {
   go: d => { if (d.v === "backEdit") { S.editRound = null; S.draft = null; S.view = "standings"; S.err = ""; if (!S.eventId) S.viewEventId = S.editEvent; return render(true); } go(d.v); },
-  logout: () => { if (!confirm("退室しますか？（記録は消えません）")) return; delete pref.code; delete pref.member; savePref(); S.groupId = null; S.eventId = null; S.me = null; S.accessCode = ""; S.accessPick = null; go("access"); },
+  logout: () => { if (!confirm("退室しますか？（記録は消えません）")) return; delete pref.gid; delete pref.member; delete pref.ph; delete pref.code; savePref(); S.groupId = null; S.eventId = null; S.me = null; S.accessGroup = null; S.unlocked = {}; S.accessPick = null; go("access"); },
+  pickGroup: d => { S.accessGroup = d.id; S.accessPick = null; S.err = ""; render(true); setTimeout(() => document.getElementById("pwInput")?.focus(), 0); },
+  unlock: async () => {
+    const g = grpOf(S.accessGroup); const pw = document.getElementById("pwInput")?.value || "";
+    if (!pw) { S.err = "パスワードを入力してください"; return render(true); }
+    if (await hashPass(S.accessGroup, pw) !== g.passHash) { S.err = "パスワードが違います"; return render(true); }
+    S.unlocked[S.accessGroup] = true; S.err = ""; render(true);
+  },
+  setFirstPass: async () => {
+    const a = document.getElementById("pwNew").value, b = document.getElementById("pwNew2").value;
+    if (a.length < 4) { S.err = "パスワードは4文字以上にしてください"; return render(true); }
+    if (a !== b) { S.err = "2回の入力が一致しません"; return render(true); }
+    const gid = S.accessGroup; if (grpOf(gid)?.passHash) { S.err = "ほかの人がすでに設定しました。そのパスワードで入ってください"; return render(true); }
+    await Store.update({ [`groups/${gid}/passHash`]: await hashPass(gid, a) });
+    S.unlocked[gid] = true; S.err = ""; toast("パスワードを設定しました"); render(true);
+  },
+  changePass: async () => {
+    const g = grp(); const cur = document.getElementById("pwCur").value, a = document.getElementById("pwNew").value, b = document.getElementById("pwNew2").value;
+    if (g.passHash && await hashPass(S.groupId, cur) !== g.passHash) { S.err = "今のパスワードが違います"; return render(true); }
+    if (a.length < 4) { S.err = "新しいパスワードは4文字以上にしてください"; return render(true); }
+    if (a !== b) { S.err = "新しいパスワードの2回の入力が一致しません"; return render(true); }
+    const h = await hashPass(S.groupId, a);
+    await Store.update({ [`groups/${S.groupId}/passHash`]: h });
+    if (pref.gid === S.groupId) { pref.ph = h; savePref(); }
+    S.err = ""; toast("パスワードを変更しました"); render(true);
+  },
   pick: d => { S.accessPick = d.id; S.err = ""; render(true); },
   enter: () => {
-    const code = S.accessCode.toUpperCase(); const gid = D().codes?.[code];
-    if (!gid || !grpOf(gid)) { S.err = "コードを確認してください"; return render(true); }
+    const gid = S.accessGroup; const g = grpOf(gid);
+    if (!g || !S.unlocked[gid]) { S.err = "先にパスワードを解除してください"; return render(true); }
     if (!S.accessPick) { S.err = "自分の名前を選んでください"; return render(true); }
-    if (S.remember) { pref.code = code; pref.member = S.accessPick; savePref(); }
+    if (S.remember) { pref.gid = gid; pref.member = S.accessPick; pref.ph = g.passHash; delete pref.code; savePref(); }
     history.replaceState(null, "", location.pathname);
     enterGroup(gid, S.accessPick);
   },
   /* グループ作成 */
-  newGroup: () => { S.gnew = { name: "", members: [], seed: true }; go("gnew"); },
+  newGroup: () => { S.gnew = { name: "", pw: "", pw2: "", members: [], seed: true }; go("gnew"); },
   gnewAdd: () => { const el = document.getElementById("gnewMember"); const v = el.value.trim(); if (!v) return; S.gnew.members.push(v); S.err = ""; render(true); document.getElementById("gnewMember").focus(); },
   gnewDel: d => { S.gnew.members.splice(Number(d.i), 1); render(true); },
   createGroup: async () => {
     const st = S.gnew; if (!st.name.trim()) { S.err = "グループ名を入力してください"; return render(true); }
+    if (st.pw.length < 4) { S.err = "パスワードは4文字以上にしてください"; return render(true); }
+    if (st.pw !== st.pw2) { S.err = "パスワードの2回の入力が一致しません"; return render(true); }
     if (st.members.length < 2) { S.err = "メンバーを2人以上追加してください"; return render(true); }
     const gid = uid(), code = newCode(), u = {}, mem = {};
     st.members.forEach((n, i) => { const id = uid() + i; u[`members/${id}`] = { name: n, order: now() + i, color: PALETTE[i % PALETTE.length] }; mem[id] = i; });
-    u[`groups/${gid}`] = { name: st.name.trim(), code, createdAt: now(), members: mem, games: st.seed ? sampleGames() : {} };
+    u[`groups/${gid}`] = { name: st.name.trim(), code, createdAt: now(), members: mem, games: st.seed ? sampleGames() : {},
+      categories: Object.fromEntries(DEFAULT_CATS.map(c => [c.id, { name: c.name, color: c.color, order: c.order }])), passHash: await hashPass(gid, st.pw) };
     u[`codes/${code}`] = gid;
     await Store.update(u);
-    S.accessCode = code; S.accessPick = null; toast(`グループのコード ${code} を発行しました`); go("access");
+    S.accessGroup = gid; S.unlocked[gid] = true; S.accessPick = null; toast("グループを作成しました。自分の名前を選んで入室してください"); go("access");
   },
   /* グループ設定 */
   addMember: async () => { const el = document.getElementById("cfgMember"); const v = el.value.trim(); if (!v) return; const id = uid();
@@ -931,7 +1058,8 @@ const actions = {
   /* ゲーム候補 */
   addGame: async () => { const name = document.getElementById("gName").value.trim(); if (!name) { S.err = "ゲーム名を入力してください"; return render(true); }
     const mult = Number(document.getElementById("gMult").value) || 1; const isFree = document.getElementById("gFree").checked; const id = uid();
-    const u = { [`groups/${S.groupId}/games/${id}`]: { name, mult, isFree, order: now() } };
+    const cat = document.getElementById("gCat")?.value || "";
+    const u = { [`groups/${S.groupId}/games/${id}`]: { name, mult, isFree, cat, order: now() } };
     if (S.eventId) u[`events/${S.eventId}/pool/${id}`] = true;
     await Store.update(u); S.err = ""; toast(`${name} を追加しました`); render(true); },
   delGame: async d => { const x = grp().games?.[d.id]; if (!confirm(`「${x.name}」を候補から削除しますか？（遊び終わった記録は残ります）`)) return;
@@ -1022,6 +1150,19 @@ const actions = {
     toast("プロフィールを保存しました"); go(S.eventId ? "menu" : "hub");
   },
   impSwap: d => { impReassign(Number(d.a), S.imp.players[Number(d.b)]); render(true); },
+  gfilter: d => { S.gfilter = d.f; render(true); },
+  catAdd: async () => { const v = document.getElementById("catNew").value.trim(); if (!v) return; const cats = catsOf(grp());
+    const used = new Set(cats.map(c => c.color)); const color = PALETTE.find(c => !used.has(c)) || PALETTE[cats.length % PALETTE.length];
+    await Store.update({ [`groups/${S.groupId}/categories/${uid()}`]: { name: v, color, order: cats.length } }); toast(`分類「${v}」を追加しました`); render(true); },
+  catColor: d => Store.update({ [`groups/${S.groupId}/categories/${d.id}/color`]: d.c }),
+  catDel: async d => { const c = catOf(grp(), d.id); const n = groupGames(grp()).filter(x => x.cat === d.id).length;
+    if (!confirm(`分類「${c.name}」を削除しますか？${n ? `\nこの分類の${n}ゲームは「未分類」になります` : ""}`)) return;
+    const u = { [`groups/${S.groupId}/categories/${d.id}`]: null };
+    groupGames(grp()).filter(x => x.cat === d.id).forEach(x => u[`groups/${S.groupId}/games/${x.id}/cat`] = null);
+    await Store.update(u); if (S.gfilter === d.id) S.gfilter = "all"; render(true); },
+  setupCat: d => { const g = grp(); const items = groupGames(g).filter(x => d.k === "none" ? !catOf(g, x.cat) : x.cat === d.k).map(x => x.id);
+    const st = S.setup; const full = items.every(id => st.games.includes(id));
+    st.games = full ? st.games.filter(id => !items.includes(id)) : [...new Set(st.games.concat(items))]; render(true); },
   recSel: d => { S.recMember = d.id; render(true); },
   copyUrl: async () => { const v = document.getElementById("joinUrl").value; try { await navigator.clipboard.writeText(v); toast("リンクをコピーしました"); } catch { document.getElementById("joinUrl").select(); toast("選択したのでコピーしてください"); } },
   /* 過去の大会の登録 */
@@ -1081,6 +1222,10 @@ const changes = {
   renameMember: el => { const v = el.value.trim(); if (v && v !== mname(el.dataset.id)) { Store.update({ [`members/${el.dataset.id}/name`]: v }); toast(`名前を「${v}」に変更しました`); } },
   impMult: el => { S.imp.rows[Number(el.dataset.ri)].mult = Number(el.value); render(true); },
   impRank: el => { const r = S.imp.rows[Number(el.dataset.ri)]; r.ranks[el.dataset.pid] = Number(el.value); r.warn = ""; render(true); },
+  gcat: el => Store.update({ [`groups/${S.groupId}/games/${el.dataset.id}/cat`]: el.value || null }),
+  gfield: el => { const k = el.dataset.k; const v = el.value.trim(); if (k === "name" && !v) { render(true); return; }
+    Store.update({ [`groups/${S.groupId}/games/${el.dataset.id}/${k}`]: v || null }); },
+  catName: el => { const v = el.value.trim(); if (v) Store.update({ [`groups/${S.groupId}/categories/${el.dataset.id}/name`]: v }); },
   impCol: el => { impReassign(Number(el.dataset.ci), el.value); render(true); },
   profIcon: async el => { const f = el.files?.[0]; if (!f) return; try { S.prof.icon = await resizeIcon(f); S.err = ""; } catch (e) { S.err = e.message; } render(true); },
   impCand: el => { S.imp.rows[Number(el.dataset.ri)].addCand = el.checked; render(true); }
@@ -1103,7 +1248,7 @@ document.addEventListener("input", ev => {
 });
 document.addEventListener("keydown", ev => {
   if (ev.key !== "Enter") return; const id = ev.target.id;
-  const map = { freeName: "setFree", gName: "addGame", gnewMember: "gnewAdd", cfgMember: "addMember", codeInput: "enter" };
+  const map = { freeName: "setFree", gName: "addGame", gnewMember: "gnewAdd", cfgMember: "addMember", pwInput: "unlock", catNew: "catAdd" };
   if (map[id]) { ev.preventDefault(); actions[map[id]](); }
 });
 
@@ -1136,11 +1281,11 @@ Store.onChange = async () => {
     booted = true;
     try { await migrate(); } catch (err) { console.error(err); }
     const q = new URLSearchParams(location.search).get("room");
-    if (q) { S.accessCode = q.toUpperCase(); }
-    else if (pref.code) {
-      const gid = D().codes?.[pref.code]; const g = gid && grpOf(gid);
-      if (g && g.members?.[pref.member] !== undefined) { enterGroup(gid, pref.member); return; }
+    const qg = q && D().codes?.[q.toUpperCase()];
+    if (pref.gid && grpOf(pref.gid) && grpOf(pref.gid).passHash && pref.ph === grpOf(pref.gid).passHash && grpOf(pref.gid).members?.[pref.member] !== undefined && (!qg || qg === pref.gid)) {
+      history.replaceState(null, "", location.pathname); enterGroup(pref.gid, pref.member); return;
     }
+    if (qg && grpOf(qg)) { S.accessGroup = qg; history.replaceState(null, "", location.pathname); }
   }
   render();
 };
