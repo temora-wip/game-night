@@ -35,7 +35,7 @@ input,select{font:inherit}
 .btn{display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:#fff;padding:9px 18px;clip-path:polygon(0 0,100% 0,100% 70%,94% 100%,0 100%);font-size:15px}
 .btn:hover{background:var(--blue2)}
 .btn.gold{background:var(--gold);color:var(--ink)}
-.btn2{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);color:#C4C7CC;padding:8px 14px;font-size:14px}
+.btn2{white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);color:#C4C7CC;padding:8px 14px;font-size:14px}
 .btn2:hover{border-color:var(--sub);color:var(--text)}
 .btn2.danger{border-color:#7a3b36;color:#F27C7C}
 .field{width:100%;background:var(--dark);border:1px solid var(--line);color:var(--text);padding:9px 10px;outline:none}
@@ -74,7 +74,9 @@ tr.click{cursor:pointer} tr.click:hover td{background:rgba(255,255,255,.04)}
 .list{display:flex;flex-direction:column;gap:4px}
 .you{font-size:10px;background:var(--blue);color:#fff;padding:0 4px;margin-left:6px;vertical-align:2px}
 .spin{display:inline-block;animation:sp .9s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
-.flash{animation:fl .12s linear}@keyframes fl{from{opacity:.4}to{opacity:1}}
+.flash{animation:fl .12s linear}
+.rsel.first{border-color:var(--gold);color:var(--gold)}
+table.imp td{padding:3px 4px}@keyframes fl{from{opacity:.4}to{opacity:1}}
 </style>
 </head>
 <body>
@@ -149,10 +151,10 @@ function setPath(obj, path, val) {
 
 /* ---------------- 画面の状態 ---------------- */
 const S = {
-  view: "access", eventId: null, me: null,
+  view: "access", groupId: null, eventId: null, me: null,
   accessCode: "", accessPick: null, remember: true,
-  setup: null, draft: null, editRound: null, stTab: "rank",
-  viewEventId: null, recMember: null, drawing: null, err: "", pending: false
+  gnew: null, setup: null, imp: null, draft: null, editRound: null, stTab: "rank",
+  viewEventId: null, recMember: null, drawing: null, err: ""
 };
 const pref = (() => { try { return JSON.parse(localStorage.getItem(PREF_KEY)) || {}; } catch { return {}; } })();
 function savePref() { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); }
@@ -162,16 +164,25 @@ const D = () => Store.data || {};
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const pad2 = n => String(n).padStart(2, "0");
+const now = () => Date.now();
 const fmtDate = t => { if (!t) return "-"; const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()}`; };
-const fmtDateTime = t => { const d = new Date(t); return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
-const mname = id => D().members?.[id]?.name ?? "（削除済み）";
+const fmtYMD = t => { const d = new Date(t); return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; };
+const fmtDateTime = t => { const d = new Date(t); return `${fmtYMD(t)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+const isoDate = t => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+const mname = id => D().members?.[id]?.name ?? "（不明）";
+const shortId = id => "ID-" + String(id).slice(-3).toUpperCase();
+const grpOf = id => D().groups?.[id];
+const grp = () => grpOf(S.groupId);
 const evOf = id => D().events?.[id];
 const curEv = () => evOf(S.eventId);
+const groupMembers = g => Object.entries(g?.members || {}).sort((a, b) => a[1] - b[1]).map(([id]) => id);
+const groupGames = g => Object.entries(g?.games || {}).map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+const groupEvents = gid => Object.entries(D().events || {}).filter(([, e]) => e.groupId === gid).map(([id, e]) => ({ id, ...e })).sort((a, b) => b.startedAt - a.startedAt);
 const playersOf = e => Object.entries(e?.players || {}).sort((a, b) => a[1] - b[1]).map(([id]) => id);
 const roundsOf = e => Object.entries(e?.rounds || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => a.at - b.at);
-const gamesList = () => Object.entries(D().games || {}).map(([id, g]) => ({ id, ...g })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, "ja"));
-const membersList = () => Object.entries(D().members || {}).map(([id, m]) => ({ id, ...m })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+const gameOf = (e, gameId) => grpOf(e?.groupId)?.games?.[gameId];
 const multBadge = m => (m && m > 1) ? `<span class="bdg">×${m}</span>` : "";
+const youTag = id => id === S.me ? '<span class="you">YOU</span>' : "";
 
 // 1ゲームの得点：参加人数Nのとき 順位r → (N - r + 1) × 倍率。同じ順位は同じ点。
 function roundPoints(r) {
@@ -188,48 +199,54 @@ function standingsOf(e, rs) {
   return arr;
 }
 function withMoves(e) {
-  const rs = roundsOf(e), now = standingsOf(e, rs);
-  if (rs.length < 2) return now.map(x => ({ ...x, move: 0 }));
+  const rs = roundsOf(e), cur = standingsOf(e, rs);
+  if (rs.length < 2) return cur.map(x => ({ ...x, move: 0 }));
   const prev = Object.fromEntries(standingsOf(e, rs.slice(0, -1)).map(x => [x.id, x.rank]));
-  return now.map(x => ({ ...x, move: prev[x.id] - x.rank }));
+  return cur.map(x => ({ ...x, move: prev[x.id] - x.rank }));
 }
+function winnersText(e) { const st = standingsOf(e, roundsOf(e)); return st.filter(x => x.rank === 1 && x.pts > 0).map(x => mname(x.id)).join("・"); }
 function remainingPool(e) {
   const played = new Set(roundsOf(e).map(r => r.gameId));
-  return Object.keys(e?.pool || {}).filter(g => D().games?.[g] && !played.has(g));
+  return Object.keys(e?.pool || {}).filter(g => gameOf(e, g) && !played.has(g));
 }
-const poolSize = e => Object.keys(e?.pool || {}).filter(g => D().games?.[g]).length + roundsOf(e).filter(r => !e.pool?.[r.gameId] || !D().games?.[r.gameId]).length;
+function poolSize(e) {
+  const pool = Object.keys(e?.pool || {}).filter(g => gameOf(e, g));
+  const extra = roundsOf(e).filter(r => !pool.includes(r.gameId)).length;
+  return pool.length + extra;
+}
 
 /* ---------------- 描画 ---------------- */
 const app = document.getElementById("app");
 let renderQueued = false;
 function render(force) {
   const a = document.activeElement;
-  if (!force && a && app.contains(a) && (a.tagName === "INPUT" || a.tagName === "SELECT") && a.type !== "checkbox") { renderQueued = true; return; }
+  if (!force && a && app.contains(a) && (a.tagName === "INPUT" || a.tagName === "SELECT" || a.tagName === "TEXTAREA") && a.type !== "checkbox") { renderQueued = true; return; }
   renderQueued = false;
   if (!Store.data) return;
   if (D().config?.closed) { app.innerHTML = viewClosed(); return; }
-  // 入室中の大会が終了・削除されたら入室画面へ
-  if (S.eventId && (!curEv() || curEv().status === "done") && !["archive", "record", "standings"].includes(S.view)) {
-    S.eventId = null; S.view = "access";
-  }
-  const v = { access: viewAccess, setup: viewSetup, menu: viewMenu, draw: viewDraw, result: viewResult,
-    standings: viewStandings, games: viewGames, archive: viewArchive, record: viewRecord, link: viewLink }[S.view] || viewAccess;
+  // グループが消えた／大会が終わった場合の戻り先
+  if (S.groupId && !grp()) { S.groupId = null; S.eventId = null; S.view = "access"; }
+  const inEventViews = ["menu", "draw", "result", "link"];
+  if (S.eventId && (!curEv() || curEv().status === "done")) { S.eventId = null; if (inEventViews.includes(S.view) || (S.view === "standings" && !S.viewEventId)) S.view = S.groupId ? "hub" : "access"; }
+  const v = { access: viewAccess, gnew: viewGroupNew, hub: viewHub, gcfg: viewGroupCfg, games: viewGames, enew: viewEventNew,
+    menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport }[S.view] || viewAccess;
   app.innerHTML = (Store.mode === "local" ? `<div class="banner">お試しモード：データはこの端末のブラウザだけに保存されます（Firebaseの設定を入れると全員で共有できます）</div>` : "") + v();
   afterRender();
 }
 document.addEventListener("focusout", () => setTimeout(() => { if (renderQueued) render(); }, 0));
 
-function header(tagText, back = "menu") {
-  const e = curEv();
-  const prog = e ? `<span><span class="pill">GAME</span> <span class="mono" style="color:var(--text);font-size:15px">${pad2(roundsOf(e).length)}/${pad2(poolSize(e))}</span></span>` : "";
+function header(tagText, back) {
+  const e = curEv(), g = grp();
+  const prog = e && ["menu", "draw", "result", "standings"].includes(S.view) && !S.viewEventId
+    ? `<span><span class="pill">GAME</span> <span class="mono" style="color:var(--text);font-size:15px">${pad2(roundsOf(e).length)}/${pad2(poolSize(e))}</span></span>` : "";
   return `<div class="hd"><div class="l">
       ${back ? `<button class="ico" data-act="go" data-v="${back}" aria-label="戻る">←</button>` : ""}
       <span class="tag">${tagText}</span>
-      ${e ? `<span class="mono dim">ROOM ${esc(e.code)}</span>` : ""}
+      ${g ? `<span class="mono dim">${esc(g.name)} · CODE ${esc(g.code)}</span>` : ""}
     </div><div class="r">
       ${prog}
-      <span class="mono dim">SYS.${fmtDateTime(Date.now())}</span>
-      ${e ? `<button class="ico" data-act="go" data-v="link" title="別の端末で入る" aria-label="別の端末で入る">▦</button>
+      <span class="mono dim">SYS.${fmtDateTime(now())}</span>
+      ${g ? `<button class="ico" data-act="go" data-v="link" title="別の端末で入る" aria-label="別の端末で入る">▦</button>
              <button class="ico" data-act="logout" title="退室" aria-label="退室">⏻</button>` : ""}
     </div></div>`;
 }
@@ -237,68 +254,188 @@ function header(tagText, back = "menu") {
 /* ----- 入室 ----- */
 function viewAccess() {
   const code = S.accessCode.toUpperCase();
-  const eid = D().codes?.[code]; const e = eid && evOf(eid);
-  const active = Object.entries(D().events || {}).filter(([, x]) => x.status !== "done");
+  const gid = D().codes?.[code]; const g = gid && grpOf(gid);
   let info = "";
   if (code.length >= 4) {
-    info = e ? `<div style="margin-top:12px;border-left:3px solid var(--blue);background:var(--dark);padding:8px 12px">
-        <p class="cap" style="margin:0">EVENT FOUND</p>
-        <p style="margin:2px 0 0;font-size:16px">${esc(e.title)}　<span class="mono">${roundsOf(e).length} / ${poolSize(e)}</span> ゲーム</p>
-        <p class="muted" style="margin:0;font-size:13px">開始 ${fmtDate(e.startedAt)}　最終更新 ${fmtDate(e.updatedAt)}</p></div>`
-      : `<p class="err">この部屋コードの大会は見つかりません</p>`;
+    if (g) {
+      const evs = groupEvents(gid); const act = g.activeEvent && evOf(g.activeEvent);
+      info = `<div style="margin-top:12px;border-left:3px solid var(--blue);background:var(--dark);padding:8px 12px">
+        <p class="cap" style="margin:0">SQUAD FOUND</p>
+        <p style="margin:2px 0 0;font-size:16px">${esc(g.name)}　<span class="muted" style="font-size:13px">メンバー${groupMembers(g).length}人・大会${evs.length}回</span></p>
+        <p class="muted" style="margin:0;font-size:13px">${act ? `開催中：${esc(act.title)}（${roundsOf(act).length} / ${poolSize(act)} ゲーム）` : "開催中の大会はありません"}</p></div>`;
+    } else info = `<p class="err">このコードのグループは見つかりません</p>`;
   }
-  const tiles = e ? playersOf(e).map(id => `<button class="ptile ${S.accessPick === id ? "on" : ""}" data-act="pick" data-id="${id}">
-        <p class="mono capg" style="font-size:10px">ID-${esc(id.slice(-3).toUpperCase())}</p><p class="n">${esc(mname(id))}</p></button>`).join("") : "";
+  const tiles = g ? groupMembers(g).map(id => `<button class="ptile ${S.accessPick === id ? "on" : ""}" data-act="pick" data-id="${id}">
+        <p class="mono capg" style="font-size:10px">${shortId(id)}</p><p class="n">${esc(mname(id))}</p></button>`).join("") : "";
   return `${header("入室 / ACCESS", null)}
   <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)">
     <div>
       <div class="stripe"></div>
-      <p class="cap" style="margin-top:12px">STEP 1　ROOM CODE</p>
+      <p class="cap" style="margin-top:12px">STEP 1　GROUP CODE</p>
       <div class="wp top-o cut" style="padding:10px 14px">
-        <input id="codeInput" class="mono" maxlength="6" autocomplete="off" placeholder="AB12" value="${esc(code)}"
+        <input id="codeInput" class="mono" maxlength="6" autocomplete="off" placeholder="K7QD" value="${esc(code)}"
           style="width:100%;border:0;background:transparent;font-size:32px;letter-spacing:8px;outline:none;color:var(--ink);text-transform:uppercase">
       </div>
       ${info}
       <div style="margin-top:22px">
-        <p class="cap">NEW EVENT</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn2" data-act="newEvent">＋ 新しい大会を作る</button><button class="btn2" data-act="go" data-v="archive">記録</button><button class="btn2" data-act="go" data-v="record">通算</button></div>
-        ${active.length ? `<p class="muted" style="font-size:12px;margin:10px 0 0">開催中：${active.map(([, x]) => `<button class="mono" style="text-decoration:underline" data-act="setCode" data-code="${esc(x.code)}">${esc(x.code)}</button> ${esc(x.title)}`).join("　")}</p>` : ""}
+        <p class="cap">NEW SQUAD</p>
+        <button class="btn2" data-act="newGroup">＋ 新しいグループを作る</button>
       </div>
     </div>
     <div>
       <p class="cap">STEP 2　SELECT PLAYER</p>
-      ${e ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${tiles}</div>
+      ${g ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${tiles}</div>
         <label class="chk" style="margin-top:12px"><input type="checkbox" data-chg="remember" ${S.remember ? "checked" : ""}> この端末で次回から自動で入室する</label>
         <div style="margin-top:12px"><button class="btn" data-act="enter">入室 / ENTER</button></div>
         <p class="err">${esc(S.err)}</p>`
-      : `<div class="row" style="color:var(--sub)">部屋コードを入れると、参加者の名前が表示されます</div>`}
+      : `<div class="row" style="color:var(--sub)">グループのコードを入れると、メンバーの名前が表示されます</div>`}
     </div>
   </div>`;
 }
 
-/* ----- 大会を作る ----- */
-function viewSetup() {
-  const st = S.setup, ms = membersList(), gs = gamesList();
-  return `${header("新しい大会 / NEW EVENT", "access")}
+/* ----- グループを作る ----- */
+function viewGroupNew() {
+  const st = S.gnew;
+  return `${header("新しいグループ / NEW SQUAD", "access")}
+  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+    <div>
+      <p class="cap">SQUAD NAME</p>
+      <input class="field" data-inp="gnew.name" value="${esc(st.name)}" placeholder="いつもの4人">
+      <p class="cap" style="margin-top:16px">MEMBERS</p>
+      <div class="list">
+        ${st.members.map((n, i) => `<div class="row" style="padding:6px 10px"><span>${esc(n)}</span><button class="btn2" style="padding:2px 8px;font-size:12px" data-act="gnewDel" data-i="${i}">外す</button></div>`).join("") || `<p class="muted" style="font-size:13px">メンバーを追加してください（2人以上）</p>`}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px"><input class="field" id="gnewMember" placeholder="名前（例：たろう）"><button class="btn2" data-act="gnewAdd">追加</button></div>
+    </div>
+    <div>
+      <p class="cap">GAME LIST</p>
+      <label class="chk row" style="padding:10px 12px"><input type="checkbox" data-chg="gnewSeed" ${st.seed ? "checked" : ""}> 前回のExcelの17ゲーム（自由枠・倍率込み）を候補に入れる</label>
+      <p class="muted" style="font-size:12px">あとから「ゲーム候補」で追加・削除・倍率の変更ができます。</p>
+    </div>
+  </div>
+  <div style="margin-top:18px"><button class="btn gold" data-act="createGroup">グループを作成してコードを発行</button><p class="err">${esc(S.err)}</p></div>`;
+}
+
+/* ----- グループのホーム ----- */
+function viewHub() {
+  const g = grp(); const evs = groupEvents(S.groupId); const act = g.activeEvent && evOf(g.activeEvent);
+  const done = evs.filter(e => e.status === "done");
+  const rec = recordStats(S.groupId).order.slice(0, 6);
+  let actHtml;
+  if (act && act.status !== "done") {
+    const st = standingsOf(act, roundsOf(act)); const lead = st.filter(x => x.rank === 1);
+    actHtml = `<div style="background:var(--dark);border-left:3px solid var(--blue);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <div><p style="margin:0;font-size:17px">${esc(act.title)}</p><p class="muted" style="margin:0;font-size:13px">${roundsOf(act).length} / ${poolSize(act)} ゲーム　首位 ${lead.map(x => esc(mname(x.id))).join("・")} ${lead[0]?.pts ?? 0}pt</p></div>
+      <button class="btn" data-act="openActive">続きから</button></div>`;
+  } else {
+    actHtml = `<div style="background:var(--dark);border-left:3px solid var(--line);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <span class="muted">開催中の大会はありません</span><button class="btn" data-act="newEvent">＋ 新しい大会</button></div>`;
+  }
+  return `${header("グループ / SQUAD", null)}
+  <div class="grid2" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)">
+    <div>
+      <div class="stripe"></div>
+      <p class="mono dim" style="margin:8px 0 0;font-size:11px">SQUAD / ${esc(g.code)}</p>
+      <p style="font-size:24px;font-weight:600;margin:0 0 12px">${esc(g.name)}</p>
+      <p class="cap">ACTIVE EVENT</p>
+      ${actHtml}
+      <p class="cap" style="margin-top:16px">ARCHIVE（このグループの過去の大会）</p>
+      <div class="list">
+        ${done.map(e => `<button class="row rowcut" style="text-align:left;padding:8px 12px" data-act="openEvent" data-id="${e.id}">
+          <span><span class="mono dim" style="font-size:12px">${fmtYMD(e.startedAt)}</span>　${esc(e.title)}${e.imported ? ' <span style="font-size:10px;background:#4A4D53;padding:0 4px">Excelから登録</span>' : ""}</span>
+          <span style="color:var(--gold);font-size:13px;margin-right:10px">優勝 ${esc(winnersText(e) || "-")}</span></button>`).join("") || `<p class="muted" style="font-size:13px">まだ終了した大会はありません</p>`}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn2" data-act="newImport">過去の大会を登録</button>
+      </div>
+    </div>
+    <div>
+      <p class="cap">SQUAD RECORD（このグループの通算）</p>
+      <div class="list">
+        ${rec.map((x, i) => `<div class="${i === 0 && x.win > 0 ? "wp" : "row"}" style="display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:7px 10px;${i === 0 && x.win > 0 ? "border-left:4px solid var(--gold)" : ""}">
+          <span>${esc(mname(x.id))}${youTag(x.id)}${g.members?.[x.id] === undefined ? '<span class="dim" style="font-size:11px">（外れた）</span>' : ""}</span><span class="mono">優勝 ${x.win}</span><span class="mono">平均 ${x.ev ? Math.round(x.sum / x.ev) : "-"}</span></div>`).join("") || `<p class="muted" style="font-size:13px">終了した大会がまだありません</p>`}
+      </div>
+      <button class="btn2" style="margin-top:8px" data-act="go" data-v="record">通算成績・得意不得意を見る</button>
+      <div class="tiles" style="margin-top:16px">
+        <button class="tile wp span3 top-o" data-act="go" data-v="games"><div><p class="t" style="font-size:19px">ゲーム候補</p><p class="capg">GAMES</p></div></button>
+        <button class="tile span3" style="background:var(--bg2);border:1px solid var(--line)" data-act="go" data-v="gcfg"><div><p class="t" style="font-size:19px">グループ設定</p><p class="capg">CONFIG</p></div></button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ----- グループ設定 ----- */
+function viewGroupCfg() {
+  const g = grp();
+  return `${header("グループ設定 / SQUAD CONFIG", "hub")}
+  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)">
+    <div>
+      <div class="stripe"></div>
+      <p class="cap" style="margin-top:10px">SQUAD NAME</p>
+      <input class="field" value="${esc(g.name)}" data-chg="groupName">
+      <p class="cap" style="margin-top:14px">GROUP CODE（固定）</p>
+      <div class="wp top-o mono" style="padding:8px 12px;font-size:28px;letter-spacing:6px">${esc(g.code)}</div>
+      <p class="muted" style="font-size:12px;margin-top:6px">このコードとリンクは大会が変わっても同じです。</p>
+    </div>
+    <div>
+      <p class="cap">MEMBERS（名前は直接書き換え・入力欄から離れると保存）</p>
+      <div class="list" style="gap:5px">
+        ${groupMembers(g).map(id => `<div class="row" style="padding:6px 10px">
+          <span class="mono dim" style="font-size:10px;width:48px">${shortId(id)}</span>
+          <input class="field" style="flex:1;padding:4px 8px" value="${esc(mname(id))}" data-chg="renameMember" data-id="${id}">
+          <button class="btn2" style="padding:3px 8px;font-size:12px" data-act="removeMember" data-id="${id}">外す</button></div>`).join("")}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px"><input class="field" id="cfgMember" placeholder="名前を追加（例：じろう）"><button class="btn2" data-act="addMember">追加</button></div>
+      <p class="muted" style="font-size:12px">名前を変えても過去の記録・通算はそのまま引き継がれます。外した人の過去の記録も残ります。</p>
+      <p class="err">${esc(S.err)}</p>
+    </div>
+  </div>`;
+}
+
+/* ----- ゲーム候補（グループごと） ----- */
+function viewGames() {
+  const g = grp(); const e = curEv(); const played = new Set(roundsOf(e).map(r => r.gameId));
+  return `${header("ゲーム候補 / GAMES", e ? "menu" : "hub")}
+  <p class="cap">GAME LIST${e ? "（チェック＝今の大会の抽選に入れる）" : ""}</p>
+  <div class="list">
+  ${groupGames(g).map(x => `<div class="row" style="padding:6px 10px;flex-wrap:wrap">
+    <span style="display:flex;align-items:center;gap:8px">${e ? `<input type="checkbox" style="width:18px;height:18px;accent-color:var(--blue)" data-chg="poolToggle" data-id="${x.id}" ${e.pool?.[x.id] ? "checked" : ""} ${played.has(x.id) ? "disabled" : ""}>` : ""}
+      ${esc(x.name)}${x.isFree ? '<span class="dim" style="font-size:12px">（自由枠）</span>' : ""}${played.has(x.id) ? '<span class="dim" style="font-size:12px">（済）</span>' : ""}</span>
+    <span style="display:flex;gap:6px;align-items:center">
+      <select class="field" style="width:auto;padding:4px 6px" data-chg="mult" data-id="${x.id}">${[1, 2, 3].map(m => `<option value="${m}" ${(x.mult || 1) === m ? "selected" : ""}>×${m}</option>`).join("")}</select>
+      <button class="btn2" style="padding:4px 8px;font-size:12px" data-act="delGame" data-id="${x.id}">削除</button></span></div>`).join("") || `<p class="muted">まだゲームがありません</p>`}
+  </div>
+  <p class="cap" style="margin-top:14px">ADD GAME</p>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <input class="field" id="gName" placeholder="ゲーム名（例：ニムト）" style="flex:1;min-width:160px">
+    <select class="field" id="gMult" style="width:auto"><option value="1">×1</option><option value="2">×2</option><option value="3">×3</option></select>
+    <label class="chk"><input type="checkbox" id="gFree">自由枠</label>
+    <button class="btn2" data-act="addGame">追加</button></div>
+  <p class="err">${esc(S.err)}</p>`;
+}
+
+/* ----- 新しい大会 ----- */
+function viewEventNew() {
+  const g = grp(), st = S.setup;
+  return `${header("新しい大会 / NEW EVENT", "hub")}
   <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
     <div>
       <p class="cap">EVENT TITLE</p>
-      <input class="field" id="setupTitle" value="${esc(st.title)}">
-      <p class="cap" style="margin-top:16px">PLAYERS（2〜6人を選択）</p>
+      <input class="field" data-inp="setup.title" value="${esc(st.title)}">
+      <p class="cap" style="margin-top:16px">PLAYERS（来られない人はタップで外す）</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        ${ms.map(m => `<button class="ptile ${st.players.includes(m.id) ? "on" : ""}" data-act="setupPlayer" data-id="${m.id}"><p class="n" style="font-size:16px">${esc(m.name)}</p></button>`).join("") || `<p class="muted">まだメンバーがいません</p>`}
+        ${groupMembers(g).map(id => `<button class="ptile ${st.players.includes(id) ? "on" : ""}" data-act="setupPlayer" data-id="${id}"><p class="n" style="font-size:16px">${esc(mname(id))}</p></button>`).join("")}
       </div>
-      <div style="display:flex;gap:6px;margin-top:8px"><input class="field" id="newMember" placeholder="名前を追加（例：たろう）"><button class="btn2" data-act="addMemberSetup">追加</button></div>
     </div>
     <div>
       <p class="cap">GAME POOL（抽選に入れるゲーム）</p>
       <div class="list" style="max-height:420px;overflow:auto">
-        ${gs.map(g => `<label class="chk row" style="padding:6px 10px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-chg="setupGame" data-id="${g.id}" ${st.games.includes(g.id) ? "checked" : ""}>${esc(g.name)}${multBadge(g.mult)}${g.isFree ? '<span class="dim" style="font-size:12px">（自由枠）</span>' : ""}</span></label>`).join("") || `<p class="muted">ゲーム候補がまだありません。</p><button class="btn2" data-act="seed">前回のExcelの17ゲームを登録する</button>`}
+        ${groupGames(g).map(x => `<label class="chk row" style="padding:6px 10px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-chg="setupGame" data-id="${x.id}" ${st.games.includes(x.id) ? "checked" : ""}>${esc(x.name)}${multBadge(x.mult)}</span></label>`).join("") || `<p class="muted">ゲーム候補がありません。グループの「ゲーム候補」で追加してください</p>`}
       </div>
       <p class="muted" style="font-size:12px">選択中 ${st.games.length} ゲーム</p>
     </div>
   </div>
-  <div style="margin-top:18px"><button class="btn gold" data-act="createEvent">大会を作成して部屋コードを発行</button><p class="err">${esc(S.err)}</p></div>`;
+  <div style="margin-top:18px"><button class="btn gold" data-act="createEvent">大会を開始</button><p class="err">${esc(S.err)}</p></div>`;
 }
 
 /* ----- メニュー ----- */
@@ -306,12 +443,10 @@ function viewMenu() {
   const e = curEv(); const st = withMoves(e); const rs = roundsOf(e); const last = rs[rs.length - 1];
   const leaders = st.filter(x => x.rank === 1);
   const total = poolSize(e) || 1; const ratio = Math.min(1, rs.length / total);
-  const circ = 2 * Math.PI * 36;
-  const second = st.find(x => x.rank > 1);
-  const cur = e.current;
+  const circ = 2 * Math.PI * 36; const second = st.find(x => x.rank > 1); const cur = e.current;
   let latest = "まだ結果がありません";
   if (last) { const p = roundPoints(last); const best = Math.max(...Object.values(p)); const w = Object.keys(p).filter(k => p[k] === best).map(mname).join("・"); latest = `${esc(last.name)}　${esc(w)}が1位`; }
-  return `${header(`<span class="mono">${esc(SITE_NAME)}</span>`, null)}
+  return `${header(`<span class="mono">${esc(SITE_NAME)}</span>`, "hub")}
   <div class="grid2">
     <div style="display:flex;flex-direction:column;gap:12px">
       <div class="stripe"></div>
@@ -321,15 +456,13 @@ function viewMenu() {
           <text x="43" y="49" text-anchor="middle" font-size="30" fill="#EDEDED">1</text><text x="43" y="64" text-anchor="middle" font-size="9" fill="#A9ADB4">RANK</text></svg>
         <div>
           <p class="mono dim" style="margin:0;font-size:11px">${esc(e.title)} / LEADER</p>
-          <p style="font-size:21px;font-weight:600;margin:0">${leaders.map(x => esc(mname(x.id)) + (x.id === S.me ? '<span class="you">YOU</span>' : "")).join("・")}</p>
+          <p style="font-size:21px;font-weight:600;margin:0">${leaders.map(x => esc(mname(x.id)) + youTag(x.id)).join("・")}</p>
           <p class="muted" style="margin:0"><span class="mono" style="color:var(--text);font-size:18px">${leaders[0]?.pts ?? 0}</span> pt${second ? `　｜　2位と ${leaders[0].pts - second.pts} 点差` : ""}</p>
         </div>
       </div>
-      <div style="background:var(--dark);border-left:3px solid var(--blue);padding:8px 12px">
-        <p class="cap" style="margin:0">LATEST REPORT</p><p style="margin:2px 0 0">${latest}</p>
-      </div>
+      <div style="background:var(--dark);border-left:3px solid var(--blue);padding:8px 12px"><p class="cap" style="margin:0">LATEST REPORT</p><p style="margin:2px 0 0">${latest}</p></div>
       <div class="list">
-        ${st.filter(x => x.rank > 1).map(x => `<div class="row rowcut"><span><span class="mono dim">${pad2(x.rank)}</span>　${esc(mname(x.id))}${x.id === S.me ? '<span class="you">YOU</span>' : ""}</span><span class="mono" style="margin-right:12px">${x.pts}</span></div>`).join("")}
+        ${st.filter(x => x.rank > 1).map(x => `<div class="row rowcut"><span><span class="mono dim">${pad2(x.rank)}</span>　${esc(mname(x.id))}${youTag(x.id)}</span><span class="mono" style="margin-right:12px">${x.pts}</span></div>`).join("")}
       </div>
     </div>
     <div class="tiles">
@@ -350,7 +483,7 @@ function viewMenu() {
             <div style="background:var(--blue2);color:#fff;padding:8px 10px;font-size:16px">ゲーム別</div></div></div>
       </button>
       <button class="tile wp span2 top-o" data-act="go" data-v="games"><div><p class="t" style="font-size:20px">候補</p><p class="capg">GAMES</p></div></button>
-      <button class="tile wp span2" data-act="go" data-v="archive"><div><p class="t" style="font-size:20px">記録</p><p class="capg">ARCHIVE</p></div></button>
+      <button class="tile wp span2" data-act="go" data-v="hub"><div><p class="t" style="font-size:20px">記録</p><p class="capg">ARCHIVE</p></div></button>
       <button class="tile span2" data-act="go" data-v="record" style="background:var(--bg2);border:1px solid var(--line)"><div><p class="t" style="font-size:20px">通算</p><p class="capg">RECORD</p></div></button>
     </div>
   </div>`;
@@ -360,7 +493,7 @@ function viewMenu() {
 function viewDraw() {
   const e = curEv(); const cur = e.current; const rem = remainingPool(e);
   const played = new Set(roundsOf(e).map(r => r.gameId));
-  const shown = S.drawing ? { name: S.drawing, mult: null } : cur;
+  const shown = S.drawing ? { name: S.drawing } : cur;
   let free = "";
   if (cur && cur.isFree && !cur.name && !S.drawing) {
     const st = standingsOf(e, roundsOf(e)); const lastRank = Math.max(...st.map(x => x.rank));
@@ -370,8 +503,8 @@ function viewDraw() {
       <p style="margin:2px 0 8px">選ぶ人：<b>${esc(choosers)}</b>（現在最下位）</p>
       <div style="display:flex;gap:6px"><input class="field" id="freeName" placeholder="遊ぶゲーム名を入力"><button class="btn2" data-act="setFree">決定</button></div></div>`;
   }
-  const poolIds = gamesList().filter(g => e.pool?.[g.id]);
-  return `${header("抽選 / DRAW")}
+  const poolGames = groupGames(grp()).filter(x => e.pool?.[x.id]);
+  return `${header("抽選 / DRAW", "menu")}
   <div class="grid2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
     <div>
       <div class="stripe"></div>
@@ -382,7 +515,7 @@ function viewDraw() {
       </div>
       ${free}
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-        ${!cur ? `<button class="btn" data-act="draw" ${S.drawing ? "disabled" : ""}>⚄ 抽選する</button>`
+        ${!cur ? `<button class="btn" data-act="draw">⚄ 抽選する</button>`
           : `<button class="btn" data-act="openResult">✓ このゲームで開始 → 結果入力</button><button class="btn2" data-act="draw">↻ 引き直す</button><button class="btn2" data-act="clearCur">取り消す</button>`}
       </div>
       <p class="muted" style="font-size:12px;margin-top:8px">残り ${rem.length} ゲームからランダムに選びます（同じゲームは出ません）</p>
@@ -391,10 +524,10 @@ function viewDraw() {
     <div>
       <p class="cap">CANDIDATE LIST</p>
       <div class="list" style="font-size:14px">
-        ${poolIds.map(g => {
-          const isCur = cur && cur.gameId === g.id, done = played.has(g.id);
+        ${poolGames.map(x => {
+          const isCur = cur && cur.gameId === x.id, done = played.has(x.id);
           return `<div class="row" style="${isCur ? "background:var(--panel);color:var(--ink);border-left:3px solid var(--orange)" : done ? "background:transparent;color:var(--dim);text-decoration:line-through" : ""};padding:5px 10px">
-            <span>${esc(g.name)}${done ? "（済）" : ""}</span><span>${g.mult > 1 ? `<span style="color:${isCur ? "var(--red)" : "#F27C7C"}">×${g.mult}</span>` : ""}</span></div>`;
+            <span>${esc(x.name)}${done ? "（済）" : ""}</span><span>${x.mult > 1 ? `<span style="color:${isCur ? "var(--red)" : "#F27C7C"}">×${x.mult}</span>` : ""}</span></div>`;
         }).join("") || `<p class="muted">抽選に入っているゲームがありません。「候補」で追加してください</p>`}
       </div>
     </div>
@@ -403,22 +536,21 @@ function viewDraw() {
 
 /* ----- 結果入力 ----- */
 function viewResult() {
-  const e = curEv(); const ps = playersOf(e);
-  let target;
-  if (S.editRound) target = e.rounds?.[S.editRound];
-  else target = e.current;
+  const e = evOf(S.editRound ? S.editEvent : S.eventId); if (!e) return `${header("結果入力 / RESULT", "hub")}<p>大会が見つかりません</p>`;
+  const ps = playersOf(e);
+  const target = S.editRound ? e.rounds?.[S.editRound] : e.current;
   if (!target || !target.name) {
-    return `${header("結果入力 / RESULT")}<div class="row">先に「抽選」で次のゲームを決めてください${target && target.isFree ? "（自由枠のゲーム名が未入力です）" : ""}</div>
+    return `${header("結果入力 / RESULT", "menu")}<div class="row">先に「抽選」で次のゲームを決めてください${target && target.isFree ? "（自由枠のゲーム名が未入力です）" : ""}</div>
       <div style="margin-top:12px"><button class="btn" data-act="go" data-v="draw">抽選へ</button></div>`;
   }
   const n = ps.length; const dr = S.draft || {};
   const parts = Object.values(dr).filter(v => v > 0).length;
   const prev = roundPoints({ ranks: Object.fromEntries(Object.entries(dr).filter(([, v]) => v > 0)), mult: target.mult });
-  return `${header(S.editRound ? "結果の修正 / EDIT" : "結果入力 / RESULT", S.editRound ? "standings" : "menu")}
+  return `${header(S.editRound ? "結果の修正 / EDIT" : "結果入力 / RESULT", S.editRound ? "backEdit" : "menu")}
   <p class="mono dim" style="margin:-6px 0 12px">OP ${esc(target.name)} ×${target.mult || 1}</p>
   <div class="grid2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
     <div class="list" style="gap:6px">
-      ${ps.map(id => `<div class="row rowcut" style="flex-wrap:wrap"><span><span class="mono dim" style="font-size:11px">ID-${esc(id.slice(-3).toUpperCase())}</span>　${esc(mname(id))}${id === S.me ? '<span class="you">YOU</span>' : ""}</span>
+      ${ps.map(id => `<div class="row rowcut" style="flex-wrap:wrap"><span><span class="mono dim" style="font-size:11px">${shortId(id)}</span>　${esc(mname(id))}${youTag(id)}</span>
         <span style="display:flex;gap:4px;margin-right:10px">${Array.from({ length: n }, (_, i) => `<button class="rk ${dr[id] === i + 1 ? "on" : ""}" data-act="rank" data-id="${id}" data-r="${i + 1}">${i + 1}</button>`).join("")}
         <button class="rk x ${dr[id] === 0 ? "on" : ""}" data-act="rank" data-id="${id}" data-r="0">不参加</button></span></div>`).join("")}
       <p class="muted" style="font-size:12px;margin:4px 0 0">同じ順位は重ねて選べます。抜けた人は「不参加」にすると、残りの人数で点数を計算します。</p>
@@ -437,111 +569,67 @@ function viewResult() {
   </div>`;
 }
 
-/* ----- 集計 ----- */
+/* ----- 集計（開催中・過去） ----- */
 function viewStandings() {
   const id = S.viewEventId || S.eventId; const e = evOf(id);
-  if (!e) return `${header("集計 / STANDINGS")}<p>大会が見つかりません</p>`;
-  const ro = id !== S.eventId || e.status === "done";
+  if (!e) return `${header("集計 / STANDINGS", "hub")}<p>大会が見つかりません</p>`;
+  const ro = !!S.viewEventId;
   const st = withMoves(e); const rs = roundsOf(e); const ps = playersOf(e);
-  const back = S.viewEventId ? "archive" : "menu";
   const tabs = `<span style="display:flex;gap:6px">
-     <button class="${S.stTab === "rank" ? "wp" : "btn2"}" style="padding:3px 12px" data-act="stTab" data-t="rank">今日の順位</button>
+     <button class="${S.stTab === "rank" ? "wp" : "btn2"}" style="padding:3px 12px" data-act="stTab" data-t="rank">${ro ? "最終順位" : "今日の順位"}</button>
      <button class="${S.stTab === "game" ? "wp" : "btn2"}" style="padding:3px 12px" data-act="stTab" data-t="game">ゲーム別</button></span>`;
   const cards = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">
     ${st.map(x => `<div class="card ${x.rank === 1 ? "first" : ""}" style="${x.rank === 2 ? "border-top-color:#8DA2C0" : ""}">
-      <p class="mono" style="font-size:11px;color:#8A8D93;margin:0">RANK ${pad2(x.rank)} ${x.move > 0 ? `<span style="color:var(--green)">▲${x.move}</span>` : x.move < 0 ? `<span style="color:#F27C7C">▼${-x.move}</span>` : ""}</p>
-      <p style="font-size:16px;margin:2px 0">${esc(mname(x.id))}${x.id === S.me ? '<span class="you">YOU</span>' : ""}</p><p class="big">${x.pts}</p></div>`).join("")}</div>`;
+      <p class="mono" style="font-size:11px;color:#8A8D93;margin:0">RANK ${pad2(x.rank)} ${!ro && x.move > 0 ? `<span style="color:var(--green)">▲${x.move}</span>` : !ro && x.move < 0 ? `<span style="color:#F27C7C">▼${-x.move}</span>` : ""}</p>
+      <p style="font-size:16px;margin:2px 0">${esc(mname(x.id))}${youTag(x.id)}</p><p class="big">${x.pts}</p></div>`).join("")}</div>`;
+  const editable = !ro || e.status === "done";
   const list = S.stTab === "rank" ? [...rs].reverse().slice(0, 3) : [...rs].reverse();
   const rows = list.map((r, i) => {
     const p = roundPoints(r); const best = Math.max(0, ...Object.values(p));
-    return `<tr class="${ro ? "" : "click"}" ${ro ? "" : `data-act="editRound" data-id="${r.id}"`}><td class="mono dim">${pad2(rs.length - i)}</td><td>${esc(r.name)}${multBadge(r.mult)}</td>
+    return `<tr class="click" data-act="editRound" data-id="${r.id}"><td class="mono dim">${pad2(rs.length - i)}</td><td>${esc(r.name)}${multBadge(r.mult)}</td>
       ${ps.map(pid => `<td class="mono" style="${p[pid] === best && best > 0 ? "color:var(--gold)" : ""}">${r.ranks?.[pid] > 0 ? p[pid] : '<span class="dim">-</span>'}</td>`).join("")}</tr>`;
   }).join("");
-  const table = `<p class="cap" style="margin-top:16px">${S.stTab === "rank" ? "LATEST 3" : "OPERATION LOG"}${ro ? "" : '<span class="dim" style="letter-spacing:0">　行をタップで修正</span>'}</p>
+  const table = `<p class="cap" style="margin-top:16px">${S.stTab === "rank" ? "LATEST 3" : "OPERATION LOG"}<span class="dim" style="letter-spacing:0">　行をタップで修正</span></p>
     <div style="overflow-x:auto"><table><tr><th style="width:42px">#</th><th>ゲーム</th>${ps.map(pid => `<th>${esc(mname(pid))}</th>`).join("")}</tr>${rows || `<tr><td colspan="${ps.length + 2}" class="muted">まだ結果がありません</td></tr>`}
     ${S.stTab === "game" ? `<tr><td></td><td style="color:#8A8D93">合計</td>${ps.map(pid => `<td class="mono" style="font-size:16px">${st.find(x => x.id === pid)?.pts ?? 0}</td>`).join("")}</tr>` : ""}</table></div>`;
-  return `${header(ro ? `記録 / ${esc(e.title)}` : "集計 / STANDINGS", back)}
+  return `${header(ro ? `記録 / ${esc(e.title)}` : "集計 / STANDINGS", ro ? "hub" : "menu")}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">${tabs}
-    ${!ro ? `<button class="btn2 danger" data-act="finishEvent">大会を終了する</button>` : `<span class="muted" style="font-size:13px">${fmtDate(e.startedAt)}〜${fmtDate(e.endedAt || e.updatedAt)}　${e.status === "done" ? "終了" : "開催中"}</span>`}</div>
-  ${S.stTab === "rank" ? cards : ""}${table}`;
+    ${!ro ? `<button class="btn2 danger" data-act="finishEvent">大会を終了する</button>` : `<span class="muted" style="font-size:13px">${fmtYMD(e.startedAt)}${e.imported ? "（Excelから登録）" : ""}　<button class="btn2 danger" style="padding:2px 8px;font-size:12px" data-act="deleteEvent">この大会を削除</button></span>`}</div>
+  ${S.stTab === "rank" ? cards : ""}${editable ? table : ""}`;
 }
 
-/* ----- 候補（ゲーム・メンバー） ----- */
-function viewGames() {
-  const e = curEv(); const played = new Set(roundsOf(e).map(r => r.gameId));
-  return `${header("候補 / GAMES")}
-  <div class="grid2" style="grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)">
-    <div>
-      <p class="cap">GAME LIST（チェック＝この大会の抽選に入れる）</p>
-      <div class="list">
-      ${gamesList().map(g => `<div class="row" style="padding:6px 10px;flex-wrap:wrap">
-        <label class="chk"><input type="checkbox" data-chg="poolToggle" data-id="${g.id}" ${e.pool?.[g.id] ? "checked" : ""} ${played.has(g.id) ? "disabled" : ""}>${esc(g.name)}${g.isFree ? '<span class="dim" style="font-size:12px">（自由枠）</span>' : ""}${played.has(g.id) ? '<span class="dim" style="font-size:12px">（済）</span>' : ""}</label>
-        <span style="display:flex;gap:6px;align-items:center">
-          <select class="field" style="width:auto;padding:4px 6px" data-chg="mult" data-id="${g.id}">${[1, 2, 3].map(m => `<option value="${m}" ${(g.mult || 1) === m ? "selected" : ""}>×${m}</option>`).join("")}</select>
-          <button class="btn2" style="padding:4px 8px;font-size:12px" data-act="delGame" data-id="${g.id}">削除</button></span></div>`).join("") || `<p class="muted">まだゲームがありません</p>`}
-      </div>
-      <p class="cap" style="margin-top:14px">ADD GAME</p>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <input class="field" id="gName" placeholder="ゲーム名（例：ニムト）" style="flex:1;min-width:160px">
-        <select class="field" id="gMult" style="width:auto"><option value="1">×1</option><option value="2">×2</option><option value="3">×3</option></select>
-        <label class="chk"><input type="checkbox" id="gFree">自由枠</label>
-        <button class="btn2" data-act="addGame">追加</button></div>
-      <p class="err">${esc(S.err)}</p>
-    </div>
-    <div>
-      <p class="cap">MEMBER LIST（メンバー名簿）</p>
-      <div class="list">
-        ${membersList().map(m => `<div class="row" style="padding:6px 10px"><input class="field" style="background:transparent;border-color:transparent;padding:2px 4px" value="${esc(m.name)}" data-chg="renameMember" data-id="${m.id}"><span class="dim" style="font-size:11px">名前を直接修正</span></div>`).join("")}
-      </div>
-      <div style="display:flex;gap:6px;margin-top:8px"><input class="field" id="newMember2" placeholder="名前を追加"><button class="btn2" data-act="addMember">追加</button></div>
-      <p class="muted" style="font-size:12px">新しいメンバーは次の大会から参加者に選べます。</p>
-    </div>
-  </div>`;
-}
-
-/* ----- 記録（過去の大会） ----- */
-function viewArchive() {
-  const evs = Object.entries(D().events || {}).sort((a, b) => b[1].startedAt - a[1].startedAt);
-  return `${header("記録 / ARCHIVE", S.eventId ? "menu" : "access")}
-  <div class="list">
-  ${evs.map(([id, e]) => {
-    const st = standingsOf(e, roundsOf(e)); const w = st.filter(x => x.rank === 1 && x.pts > 0).map(x => mname(x.id)).join("・");
-    return `<button class="row rowcut" style="text-align:left;padding:10px 14px" data-act="openEvent" data-id="${id}">
-      <span><span class="mono dim" style="font-size:12px">${fmtDate(e.startedAt)}</span>　<b>${esc(e.title)}</b>　<span class="muted" style="font-size:13px">${roundsOf(e).length}ゲーム</span></span>
-      <span style="font-size:13px">${e.status === "done" ? `<span style="color:var(--gold)">優勝 ${esc(w || "-")}</span>` : `<span style="color:var(--blue2)">開催中 ROOM ${esc(e.code)}</span>`}</span></button>`;
-  }).join("") || `<p class="muted">まだ大会の記録がありません</p>`}
-  </div>`;
-}
-
-/* ----- 通算 ----- */
+/* ----- 通算（グループ内） ----- */
 function rankLetter(v) { return v >= .8 ? "S" : v >= .6 ? "A" : v >= .4 ? "B" : v >= .2 ? "C" : "D"; }
-function viewRecord() {
-  const evs = Object.values(D().events || {}); const ms = membersList();
-  const stat = {}; ms.forEach(m => stat[m.id] = { ev: 0, win: 0, sum: 0, games: {} });
-  for (const e of evs) {
+function recordStats(gid) {
+  const g = grpOf(gid); const stat = {};
+  const ensure = id => stat[id] ||= { id, ev: 0, win: 0, sum: 0, games: {} };
+  groupMembers(g).forEach(ensure);
+  for (const e of groupEvents(gid)) {
     const rs = roundsOf(e);
-    if (e.status === "done") {
-      for (const x of standingsOf(e, rs)) { if (!stat[x.id]) continue; stat[x.id].ev++; stat[x.id].sum += x.pts; if (x.rank === 1 && x.pts > 0) stat[x.id].win++; }
-    }
+    if (e.status === "done") for (const x of standingsOf(e, rs)) { const s = ensure(x.id); s.ev++; s.sum += x.pts; if (x.rank === 1 && x.pts > 0) s.win++; }
     for (const r of rs) {
       const ent = Object.entries(r.ranks || {}).filter(([, v]) => v > 0); const n = ent.length; if (n < 2) continue;
-      for (const [id, rk] of ent) { if (!stat[id]) continue; const g = stat[id].games[r.name] ||= { n: 0, s: 0 }; g.n++; g.s += (n - rk) / (n - 1); }
+      for (const [id, rk] of ent) { const gm = ensure(id).games[r.name] ||= { n: 0, s: 0 }; gm.n++; gm.s += (n - rk) / (n - 1); }
     }
   }
-  const order = ms.filter(m => stat[m.id]).sort((a, b) => stat[b.id].win - stat[a.id].win || (stat[b.id].ev ? stat[b.id].sum / stat[b.id].ev : 0) - (stat[a.id].ev ? stat[a.id].sum / stat[a.id].ev : 0));
+  const avg = s => s.ev ? s.sum / s.ev : 0;
+  const order = Object.values(stat).sort((a, b) => b.win - a.win || avg(b) - avg(a));
+  return { stat, order, done: groupEvents(gid).filter(e => e.status === "done").length };
+}
+function viewRecord() {
+  const { stat, order, done } = recordStats(S.groupId); const g = grp(); const inG = new Set(groupMembers(g));
   const sel = S.recMember && stat[S.recMember] ? S.recMember : (S.me && stat[S.me] ? S.me : order[0]?.id);
-  const apt = sel ? Object.entries(stat[sel].games).map(([name, g]) => ({ name, n: g.n, v: g.s / g.n })).sort((a, b) => b.v - a.v) : [];
+  const apt = sel ? Object.entries(stat[sel].games).map(([name, x]) => ({ name, n: x.n, v: x.s / x.n })).sort((a, b) => b.v - a.v) : [];
   const col = v => v >= .8 ? "var(--gold)" : v >= .4 ? "var(--blue)" : "var(--red)";
-  const doneCount = evs.filter(e => e.status === "done").length;
-  return `${header("通算 / RECORD", S.eventId ? "menu" : "access")}
-  <p class="mono dim" style="margin:-6px 0 12px">TOTAL ${doneCount} EVENTS（終了した大会のみ集計）</p>
+  return `${header("通算 / RECORD", S.eventId ? "menu" : "hub")}
+  <p class="mono dim" style="margin:-6px 0 12px">${esc(g.name)}　TOTAL ${done} EVENTS（このグループの終了した大会のみ集計）</p>
   <div class="grid2" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)">
     <div>
       <p class="cap">PLAYER STATUS（タップで得意・不得意を表示）</p>
       <div class="list">
-        ${order.map((m, i) => { const s = stat[m.id]; const on = m.id === sel;
-          return `<button class="${on ? "wp" : "row"}" data-act="recSel" data-id="${m.id}" style="display:grid;grid-template-columns:1fr auto auto auto;gap:12px;padding:8px 12px;text-align:left;${on ? "border-left:4px solid var(--gold)" : ""}">
-            <span>${esc(m.name)}${m.id === S.me ? '<span class="you">YOU</span>' : ""}</span><span class="mono">参加 ${s.ev}</span><span class="mono">優勝 ${s.win}</span><span class="mono">平均 ${s.ev ? Math.round(s.sum / s.ev) : "-"}</span></button>`; }).join("") || `<p class="muted">メンバーがいません</p>`}
+        ${order.map(s => { const on = s.id === sel;
+          return `<button class="${on ? "wp" : "row"}" data-act="recSel" data-id="${s.id}" style="display:grid;grid-template-columns:1fr auto auto auto;gap:12px;padding:8px 12px;text-align:left;${on ? "border-left:4px solid var(--gold)" : ""}">
+            <span>${esc(mname(s.id))}${youTag(s.id)}${inG.has(s.id) ? "" : '<span class="dim" style="font-size:11px">（外れたメンバー）</span>'}</span><span class="mono">参加 ${s.ev}</span><span class="mono">優勝 ${s.win}</span><span class="mono">平均 ${s.ev ? Math.round(s.sum / s.ev) : "-"}</span></button>`; }).join("") || `<p class="muted">メンバーがいません</p>`}
       </div>
     </div>
     <div>
@@ -555,11 +643,82 @@ function viewRecord() {
   </div>`;
 }
 
+/* ----- 過去の大会を登録 ----- */
+function viewImport() {
+  const g = grp(), im = S.imp, ps = im.players, n = ps.length;
+  const rows = im.rows;
+  const totals = {}; ps.forEach(p => totals[p] = 0);
+  rows.forEach(r => { const p = roundPoints(r); for (const k in p) if (k in totals) totals[k] += p[k]; });
+  const best = Math.max(0, ...Object.values(totals));
+  const rankSel = (ri, pid) => `<select class="field rsel ${rows[ri].ranks[pid] === 1 ? "first" : ""}" style="width:auto;padding:3px 4px" data-chg="impRank" data-ri="${ri}" data-pid="${pid}">
+      ${Array.from({ length: n }, (_, i) => `<option value="${i + 1}" ${rows[ri].ranks[pid] === i + 1 ? "selected" : ""}>${i + 1}位</option>`).join("")}
+      <option value="0" ${!rows[ri].ranks[pid] ? "selected" : ""}>不参加</option></select>`;
+  return `${header("過去の大会を登録 / IMPORT", "hub")}
+  <div class="grid2" style="grid-template-columns:minmax(0,.9fr) minmax(0,1.5fr)">
+    <div>
+      <div class="stripe"></div>
+      <p class="cap" style="margin-top:10px">EVENT</p>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
+        <input class="field" data-inp="imp.title" value="${esc(im.title)}">
+        <input class="field mono" type="date" data-inp="imp.date" value="${esc(im.date)}" style="width:auto">
+      </div>
+      <p class="cap" style="margin-top:14px">PLAYERS（Excelの列の順にタップ）</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+        ${groupMembers(g).map(id => { const i = ps.indexOf(id); return `<button class="ptile ${i >= 0 ? "on" : ""}" style="padding:6px 10px" data-act="impPlayer" data-id="${id}">
+          <span class="mono" style="font-size:11px;color:#8A8D93">${i >= 0 ? `列${i + 1}` : "―"}</span> ${esc(mname(id))}</button>`; }).join("")}
+      </div>
+      <p class="cap" style="margin-top:14px">PASTE FROM EXCEL</p>
+      <textarea class="field mono" data-inp="imp.text" rows="7" style="font-size:12px;resize:vertical" placeholder="Excelで「ゲーム名＋参加者の列」の範囲を選んでコピーし、ここに貼り付け">${esc(im.text)}</textarea>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn" data-act="impParse">読み取る</button><button class="btn2" data-act="impAddRow">＋ 1行ずつ手入力</button></div>
+      <p class="muted" style="font-size:11px;margin-top:6px">当時の数字は順位として読み取ります。数字が2倍・3倍の行は倍率を自動で見分けて順位に戻します。「合計点」の行や空のセル（不参加）も扱えます。</p>
+    </div>
+    <div>
+      <p class="cap">PREVIEW（${rows.length}ゲーム・点数は今のルールで再計算）</p>
+      ${rows.length ? `<div style="overflow-x:auto"><table class="imp">
+        <tr><th style="min-width:130px">ゲーム</th><th>倍率</th>${ps.map(p => `<th>${esc(mname(p))}</th>`).join("")}<th></th></tr>
+        ${rows.map((r, ri) => `<tr style="${r.warn ? "background:rgba(200,70,60,.15)" : ""}">
+          <td><input class="field" style="padding:3px 6px" value="${esc(r.name)}" data-inp="impName" data-ri="${ri}">${r.warn ? `<div style="font-size:10px;color:#F27C7C">${esc(r.warn)}</div>` : r.note ? `<div style="font-size:10px;color:var(--sub)">${esc(r.note)}</div>` : ""}</td>
+          <td><select class="field" style="width:auto;padding:3px 4px" data-chg="impMult" data-ri="${ri}">${[1, 2, 3].map(m => `<option value="${m}" ${r.mult === m ? "selected" : ""}>×${m}</option>`).join("")}</select></td>
+          ${ps.map(p => `<td>${rankSel(ri, p)}</td>`).join("")}
+          <td><button class="btn2" style="padding:2px 6px;font-size:11px" data-act="impDelRow" data-ri="${ri}">削除</button></td></tr>`).join("")}
+        <tr><td style="color:#8A8D93">今のルールでの合計</td><td></td>${ps.map(p => `<td class="mono" style="font-size:16px;${totals[p] === best && best > 0 ? "color:var(--gold)" : ""}">${totals[p]}</td>`).join("")}<td></td></tr>
+      </table></div>` : `<div class="row" style="color:var(--sub)">参加者を選んでExcelの表を貼り付け、「読み取る」を押してください</div>`}
+      <div style="margin-top:12px"><button class="btn gold" data-act="impSave">この内容で記録に登録</button><p class="err">${esc(S.err)}</p></div>
+    </div>
+  </div>`;
+}
+function normName(s) { return String(s).replace(/^[①-⑳⓪\s]+/, "").replace(/[０-９Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim(); }
+const nameKey = s => String(s).normalize("NFKC").replace(/\s+/g, "").toLowerCase();
+function parseImport(text, n) {
+  const rows = [];
+  const toNum = c => { const t = String(c ?? "").trim().replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0)); return t === "" ? null : (/^-?\d+(\.\d+)?$/.test(t) ? Number(t) : NaN); };
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let name, cells;
+    if (line.includes("\t")) { const c = line.split("\t"); name = c[0]; cells = c.slice(1); }
+    else { const t = line.trim().split(/\s+/); const i = t.findIndex(x => toNum(x) !== null && !isNaN(toNum(x))); if (i <= 0) continue; name = t.slice(0, i).join(" "); cells = t.slice(i); }
+    name = normName(name);
+    if (!name || /合計/.test(name)) continue;
+    const vals = Array.from({ length: n }, (_, i) => toNum(cells[i]));
+    if (vals.some(v => Number.isNaN(v)) || vals.every(v => v === null)) continue; // 見出し行など
+    const present = vals.filter(v => v !== null); const m = present.length;
+    const sum = present.reduce((a, b) => a + b, 0); const base = m * (m + 1) / 2;
+    let k = Math.max(1, Math.round(sum / base)); if (k > 3 || !present.every(v => v % k === 0)) k = 1;
+    const ranks = {}; const rk = vals.map(v => v === null ? 0 : v / k);
+    let warn = "";
+    rk.forEach(r => { if (r !== 0 && (r < 1 || r > m || !Number.isInteger(r))) warn = `順位として読めない数字があります（${vals.join("・")}）。直してください`; });
+    if (m < 2) warn = "参加者が2人未満です";
+    const isFree = /自由枠/.test(name);
+    rows.push({ name: isFree ? "自由枠" : name, mult: k, rk, warn, note: isFree ? "自由枠：実際に遊んだゲーム名に書き換えできます" : k > 1 ? `${k}倍を検出（${vals.join("・")} → 順位に変換）` : "" });
+  }
+  return rows;
+}
+
 /* ----- 別の端末で入る ----- */
 function joinUrl(code) { return location.origin + location.pathname + "?room=" + encodeURIComponent(code); }
 function viewLink() {
-  const e = curEv(); const url = joinUrl(e.code);
-  return `${header("別の端末で入る / LINK")}
+  const g = grp(); const url = joinUrl(g.code);
+  return `${header("別の端末で入る / LINK", S.eventId ? "menu" : "hub")}
   <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;align-items:center" class="linkgrid">
     <div class="wp top-o" style="padding:12px;text-align:center"><div id="qr" style="width:180px;height:180px;display:flex;align-items:center;justify-content:center;color:#8A8D93;font-size:12px">QRを準備中…</div>
       <p class="capg" style="margin-top:4px">SCAN TO JOIN</p></div>
@@ -567,89 +726,121 @@ function viewLink() {
       <div class="stripe"></div>
       <p class="cap" style="margin-top:10px">ACCESS LINK</p>
       <div style="display:flex;gap:6px"><input class="field mono" readonly value="${esc(url)}" id="joinUrl"><button class="btn" data-act="copyUrl">コピー</button></div>
-      <p class="muted" style="font-size:13px;margin-top:10px">スマホのカメラでQRを読むか、リンクをDiscordに貼ってください。開いたら名前を選ぶだけで入室できます。</p>
-      <p class="mono dim" style="font-size:12px">ROOM ${esc(e.code)}　｜　${esc(e.title)}</p>
+      <p class="muted" style="font-size:13px;margin-top:10px">スマホのカメラでQRを読むか、リンクをDiscordに貼ってください。開いたら名前を選ぶだけで入室できます。このリンクは大会が変わっても使えます。</p>
+      <p class="mono dim" style="font-size:12px">${esc(g.name)}　｜　CODE ${esc(g.code)}</p>
     </div>
   </div>`;
 }
-
 function viewClosed() {
   return `<div style="padding:80px 0;text-align:center"><div class="stripe" style="margin:0 auto 16px"></div>
     <p class="cap">SYSTEM OFFLINE</p><p style="font-size:26px;font-weight:600;margin:0">現在サイトは停止中です</p>
     <p class="muted">管理者が再開するまでお待ちください</p></div>`;
 }
 function showFatal(msg) { app.innerHTML = `<div class="row" style="margin-top:40px;color:#F27C7C">${esc(msg)}</div>`; }
-
 function afterRender() {
-  if (S.view === "link") {
-    const box = document.getElementById("qr"); const e = curEv();
-    if (box && e && window.qrcode) {
-      const q = qrcode(0, "M"); q.addData(joinUrl(e.code)); q.make();
-      box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
-      const svg = box.querySelector("svg"); if (svg) { svg.setAttribute("width", "180"); svg.setAttribute("height", "180"); }
-    } else if (box) box.textContent = "QRを表示できません（リンクを使ってください）";
-  }
-  const ci = document.getElementById("codeInput");
-  if (ci && S.view === "access" && !S._codeFocused) { /* 初回はフォーカスしない（スマホで勝手にキーボードが出ないように） */ }
+  if (S.view !== "link") return;
+  const box = document.getElementById("qr"); const g = grp(); if (!box || !g) return;
+  if (window.qrcode) {
+    const q = qrcode(0, "M"); q.addData(joinUrl(g.code)); q.make();
+    box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    const svg = box.querySelector("svg"); if (svg) { svg.setAttribute("width", "180"); svg.setAttribute("height", "180"); }
+  } else box.textContent = "QRを表示できません（リンクを使ってください）";
 }
 
 /* ---------------- 操作 ---------------- */
 let toastT;
-function toast(msg) { let t = document.querySelector(".toast"); if (!t) { t = document.createElement("div"); t.className = "toast"; document.body.appendChild(t); } t.textContent = msg; clearTimeout(toastT); toastT = setTimeout(() => t.remove(), 2200); }
-function go(v) { S.view = v; S.err = ""; window.scrollTo(0, 0); render(true); }
-const now = () => Date.now();
-function touch(e) { return { [`events/${S.eventId}/updatedAt`]: now() }; }
-
-function newCode() {
+function toast(msg) { let t = document.querySelector(".toast"); if (!t) { t = document.createElement("div"); t.className = "toast"; document.body.appendChild(t); } t.textContent = msg; clearTimeout(toastT); toastT = setTimeout(() => t.remove(), 2400); }
+function go(v) { S.view = v; S.err = ""; if (v !== "standings") S.viewEventId = null; window.scrollTo(0, 0); render(true); }
+const touch = () => ({ [`events/${S.eventId}/updatedAt`]: now() });
+function newCode(taken = {}) {
   const cs = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let c;
-  do { c = Array.from({ length: 4 }, () => cs[Math.floor(Math.random() * cs.length)]).join(""); } while (D().codes?.[c]);
+  do { c = Array.from({ length: 4 }, () => cs[Math.floor(Math.random() * cs.length)]).join(""); } while (D().codes?.[c] || taken[c]);
   return c;
+}
+const SAMPLE_GAMES = ["ブラックジャック", "フリップ7", "ヤッツィー", "四麻（半荘）", "キャントストップ", "ラスベガス", "ハーツ（75点）", "インカの黄金", "ゴッドフィールド", "ニムト", "キャット・イン・ザ・ボックス", "キャッスルコンボ", "マインドアップ", "大富豪", "ラッキーナンバー", "ハゲタカのえじき"];
+function sampleGames() {
+  const o = {};
+  SAMPLE_GAMES.forEach((n, i) => o[uid() + i] = { name: n, mult: n === "ゴッドフィールド" ? 2 : 1, isFree: false, order: i });
+  o[uid() + "f"] = { name: "自由枠", mult: 2, isFree: true, order: 99 };
+  return o;
+}
+function enterGroup(gid, mid) {
+  S.groupId = gid; S.me = mid; const g = grpOf(gid);
+  const act = g.activeEvent && evOf(g.activeEvent);
+  if (act && act.status !== "done" && act.players?.[mid] !== undefined) { S.eventId = g.activeEvent; go("menu"); }
+  else { S.eventId = null; go("hub"); }
 }
 
 const actions = {
-  go: d => { if (d.v === "standings") { S.viewEventId = null; } go(d.v); },
-  logout: () => { if (!confirm("退室しますか？（記録は消えません）")) return; delete pref.code; delete pref.member; savePref(); S.eventId = null; S.me = null; S.accessCode = ""; S.accessPick = null; go("access"); },
-  setCode: d => { S.accessCode = d.code; S.accessPick = null; render(true); },
+  go: d => { if (d.v === "backEdit") { S.editRound = null; S.draft = null; S.view = "standings"; S.err = ""; if (!S.eventId) S.viewEventId = S.editEvent; return render(true); } go(d.v); },
+  logout: () => { if (!confirm("退室しますか？（記録は消えません）")) return; delete pref.code; delete pref.member; savePref(); S.groupId = null; S.eventId = null; S.me = null; S.accessCode = ""; S.accessPick = null; go("access"); },
   pick: d => { S.accessPick = d.id; S.err = ""; render(true); },
   enter: () => {
-    const eid = D().codes?.[S.accessCode.toUpperCase()];
-    if (!eid) { S.err = "部屋コードを確認してください"; return render(true); }
+    const code = S.accessCode.toUpperCase(); const gid = D().codes?.[code];
+    if (!gid || !grpOf(gid)) { S.err = "コードを確認してください"; return render(true); }
     if (!S.accessPick) { S.err = "自分の名前を選んでください"; return render(true); }
-    S.eventId = eid; S.me = S.accessPick;
-    if (S.remember) { pref.code = S.accessCode.toUpperCase(); pref.member = S.me; savePref(); }
+    if (S.remember) { pref.code = code; pref.member = S.accessPick; savePref(); }
     history.replaceState(null, "", location.pathname);
-    go("menu");
+    enterGroup(gid, S.accessPick);
   },
-  newEvent: () => {
-    const n = Object.keys(D().events || {}).length + 1;
-    S.setup = { title: `第${n}回大会`, players: [], games: gamesList().map(g => g.id) };
-    go("setup");
+  /* グループ作成 */
+  newGroup: () => { S.gnew = { name: "", members: [], seed: true }; go("gnew"); },
+  gnewAdd: () => { const el = document.getElementById("gnewMember"); const v = el.value.trim(); if (!v) return; S.gnew.members.push(v); S.err = ""; render(true); document.getElementById("gnewMember").focus(); },
+  gnewDel: d => { S.gnew.members.splice(Number(d.i), 1); render(true); },
+  createGroup: async () => {
+    const st = S.gnew; if (!st.name.trim()) { S.err = "グループ名を入力してください"; return render(true); }
+    if (st.members.length < 2) { S.err = "メンバーを2人以上追加してください"; return render(true); }
+    const gid = uid(), code = newCode(), u = {}, mem = {};
+    st.members.forEach((n, i) => { const id = uid() + i; u[`members/${id}`] = { name: n, order: now() + i }; mem[id] = i; });
+    u[`groups/${gid}`] = { name: st.name.trim(), code, createdAt: now(), members: mem, games: st.seed ? sampleGames() : {} };
+    u[`codes/${code}`] = gid;
+    await Store.update(u);
+    S.accessCode = code; S.accessPick = null; toast(`グループのコード ${code} を発行しました`); go("access");
   },
+  /* グループ設定 */
+  addMember: async () => { const el = document.getElementById("cfgMember"); const v = el.value.trim(); if (!v) return; const id = uid();
+    const ord = Math.max(-1, ...Object.values(grp().members || {})) + 1;
+    await Store.update({ [`members/${id}`]: { name: v, order: now() }, [`groups/${S.groupId}/members/${id}`]: ord }); toast(`${v} を追加しました`); render(true); },
+  removeMember: async d => { if (groupMembers(grp()).length <= 2) { S.err = "メンバーは2人以上必要です"; return render(true); }
+    if (!confirm(`${mname(d.id)} をグループから外しますか？\n（過去の記録は残ります）`)) return;
+    await Store.update({ [`groups/${S.groupId}/members/${d.id}`]: null }); toast(`${mname(d.id)} を外しました`); },
+  /* ゲーム候補 */
+  addGame: async () => { const name = document.getElementById("gName").value.trim(); if (!name) { S.err = "ゲーム名を入力してください"; return render(true); }
+    const mult = Number(document.getElementById("gMult").value) || 1; const isFree = document.getElementById("gFree").checked; const id = uid();
+    const u = { [`groups/${S.groupId}/games/${id}`]: { name, mult, isFree, order: now() } };
+    if (S.eventId) u[`events/${S.eventId}/pool/${id}`] = true;
+    await Store.update(u); S.err = ""; toast(`${name} を追加しました`); render(true); },
+  delGame: async d => { const x = grp().games?.[d.id]; if (!confirm(`「${x.name}」を候補から削除しますか？（遊び終わった記録は残ります）`)) return;
+    await Store.update({ [`groups/${S.groupId}/games/${d.id}`]: null }); },
+  /* 大会 */
+  newEvent: () => { const g = grp(); const n = groupEvents(S.groupId).length + 1;
+    S.setup = { title: `第${n}回大会`, players: groupMembers(g), games: groupGames(g).map(x => x.id) }; go("enew"); },
   setupPlayer: d => { const p = S.setup.players; const i = p.indexOf(d.id); if (i >= 0) p.splice(i, 1); else p.push(d.id); S.err = ""; render(true); },
-  addMemberSetup: async () => { const el = document.getElementById("newMember"); const name = el.value.trim(); if (!name) return; const id = uid();
-    S.setup.title = document.getElementById("setupTitle").value; await Store.update({ [`members/${id}`]: { name, order: now() } }); S.setup.players.push(id); render(true); },
   createEvent: async () => {
-    const st = S.setup; st.title = document.getElementById("setupTitle").value.trim() || st.title;
-    if (st.players.length < 2 || st.players.length > 6) { S.err = "参加者を2〜6人選んでください"; return render(true); }
+    const st = S.setup; const g = grp();
+    if (g.activeEvent && evOf(g.activeEvent)?.status !== "done") { S.err = "開催中の大会があります。先に終了してください"; return render(true); }
+    const order = groupMembers(g).filter(id => st.players.includes(id));
+    if (order.length < 2 || order.length > 6) { S.err = "参加者を2〜6人にしてください"; return render(true); }
     if (!st.games.length) { S.err = "抽選に入れるゲームを1つ以上選んでください"; return render(true); }
-    const id = uid(), code = newCode(), t = now();
+    const id = uid(), t = now();
     await Store.update({
-      [`events/${id}`]: { title: st.title, code, status: "active", startedAt: t, updatedAt: t,
-        players: Object.fromEntries(st.players.map((p, i) => [p, i])), pool: Object.fromEntries(st.games.map(g => [g, true])) },
-      [`codes/${code}`]: id
+      [`events/${id}`]: { groupId: S.groupId, title: st.title.trim() || "大会", status: "active", startedAt: t, updatedAt: t,
+        players: Object.fromEntries(order.map((p, i) => [p, i])), pool: Object.fromEntries(st.games.map(x => [x, true])) },
+      [`groups/${S.groupId}/activeEvent`]: id
     });
-    S.accessCode = code; S.accessPick = null; toast(`部屋コード ${code} を発行しました`); go("access");
+    S.eventId = id; toast("大会を開始しました"); go("menu");
   },
+  openActive: () => { const g = grp(); S.eventId = g.activeEvent; go("menu"); },
   draw: () => {
     const e = curEv(); let rem = remainingPool(e);
-    if (e.current && rem.length > 1) rem = rem.filter(g => g !== e.current.gameId);
+    if (e.current && rem.length > 1) rem = rem.filter(x => x !== e.current.gameId);
     if (!rem.length) { S.err = "残りのゲームがありません（「候補」で追加できます）"; return render(true); }
     const pick = rem[Math.floor(Math.random() * rem.length)];
-    const names = rem.map(g => D().games[g]?.name || "?"); let k = 0; S.err = "";
+    const names = rem.map(x => gameOf(e, x)?.name || "?"); let k = 0; S.err = "";
     const timer = setInterval(() => { S.drawing = names[k++ % names.length]; render(true); }, 90);
     setTimeout(async () => {
-      clearInterval(timer); S.drawing = null; const g = D().games[pick];
-      await Store.update({ [`events/${S.eventId}/current`]: { gameId: pick, name: g.isFree ? "" : g.name, mult: g.mult || 1, isFree: !!g.isFree, at: now() }, ...touch() });
+      clearInterval(timer); S.drawing = null; const x = gameOf(e, pick);
+      await Store.update({ [`events/${S.eventId}/current`]: { gameId: pick, name: x.isFree ? "" : x.name, mult: x.mult || 1, isFree: !!x.isFree, at: now() }, ...touch() });
       render(true);
     }, 1300);
   },
@@ -657,50 +848,90 @@ const actions = {
   setFree: async () => { const v = document.getElementById("freeName").value.trim(); if (!v) { S.err = "ゲーム名を入力してください"; return render(true); }
     S.err = ""; await Store.update({ [`events/${S.eventId}/current/name`]: v, ...touch() }); render(true); },
   openResult: () => { S.editRound = null; S.draft = {}; go("result"); },
-  editRound: d => { const r = curEv().rounds?.[d.id]; if (!r) return; S.editRound = d.id; S.draft = { ...(r.ranks || {}) }; go("result"); },
-  rank: d => { S.draft = S.draft || {}; const r = Number(d.r); S.draft[d.id] = S.draft[d.id] === r ? undefined : r; if (S.draft[d.id] === undefined) delete S.draft[d.id]; S.err = ""; render(true); },
+  editRound: d => {
+    const eid = S.viewEventId || S.eventId; const r = evOf(eid)?.rounds?.[d.id]; if (!r) return;
+    S.editEvent = eid; S.editRound = d.id; S.draft = { ...(r.ranks || {}) };
+    if (S.viewEventId) { S.eventId = null; }
+    S.view = "result"; S.err = ""; render(true);
+  },
+  rank: d => { S.draft = S.draft || {}; const r = Number(d.r); if (S.draft[d.id] === r) delete S.draft[d.id]; else S.draft[d.id] = r; S.err = ""; render(true); },
   submitResult: async () => {
-    const e = curEv(); const ps = playersOf(e); const dr = S.draft || {};
+    const eid = S.editRound ? S.editEvent : S.eventId; const e = evOf(eid); const ps = playersOf(e); const dr = S.draft || {};
     const missing = ps.filter(p => !(p in dr)); if (missing.length) { S.err = `${missing.map(mname).join("・")} の順位が未選択です`; return render(true); }
     const n = ps.filter(p => dr[p] > 0).length; if (n < 2) { S.err = "参加者が2人以上必要です"; return render(true); }
     const over = ps.filter(p => dr[p] > n); if (over.length) { S.err = `参加は${n}人なので、順位は1〜${n}で選んでください`; return render(true); }
     const ranks = Object.fromEntries(ps.map(p => [p, dr[p]]));
     if (S.editRound) {
-      await Store.update({ [`events/${S.eventId}/rounds/${S.editRound}/ranks`]: ranks, ...touch() });
-      toast("結果を修正しました"); S.editRound = null; S.draft = null; return go("standings");
+      await Store.update({ [`events/${eid}/rounds/${S.editRound}/ranks`]: ranks, [`events/${eid}/updatedAt`]: now() });
+      toast("結果を修正しました"); const back = e.status === "done"; S.editRound = null; S.draft = null;
+      if (back) { S.viewEventId = eid; S.view = "standings"; S.err = ""; return render(true); }
+      return go("standings");
     }
     const c = e.current; const rid = uid();
-    await Store.update({ [`events/${S.eventId}/rounds/${rid}`]: { gameId: c.gameId, name: c.name, mult: c.mult || 1, ranks, at: now(), by: S.me || "" },
-      [`events/${S.eventId}/current`]: null, ...touch() });
+    await Store.update({ [`events/${eid}/rounds/${rid}`]: { gameId: c.gameId, name: c.name, mult: c.mult || 1, ranks, at: now(), by: S.me || "" },
+      [`events/${eid}/current`]: null, ...touch() });
     S.draft = null; toast("結果を確定しました"); go("menu");
   },
   deleteRound: async () => { if (!confirm("この結果を削除しますか？（元に戻せません）")) return;
-    const r = curEv().rounds?.[S.editRound];
-    await Store.update({ [`events/${S.eventId}/rounds/${S.editRound}`]: null, ...touch() });
-    toast(`${r?.name ?? ""} の結果を削除しました（抽選の候補に戻りました）`); S.editRound = null; S.draft = null; go("standings"); },
+    const eid = S.editEvent; const e = evOf(eid); const r = e.rounds?.[S.editRound];
+    await Store.update({ [`events/${eid}/rounds/${S.editRound}`]: null, [`events/${eid}/updatedAt`]: now() });
+    toast(`${r?.name ?? ""} の結果を削除しました`); S.editRound = null; S.draft = null;
+    if (e.status === "done") { S.viewEventId = eid; S.view = "standings"; return render(true); }
+    go("standings"); },
   stTab: d => { S.stTab = d.t; render(true); },
-  finishEvent: async () => { const e = curEv(); if (!confirm(`「${e.title}」を終了しますか？\n部屋コード ${e.code} は使えなくなり、結果は「記録」と「通算」に残ります。`)) return;
-    await Store.update({ [`events/${S.eventId}/status`]: "done", [`events/${S.eventId}/endedAt`]: now(), [`codes/${e.code}`]: null, ...touch() });
-    delete pref.code; savePref(); S.viewEventId = S.eventId; S.eventId = null; toast("大会を終了しました"); go("standings"); },
-  openEvent: d => { const e = evOf(d.id); if (e.status !== "done" && d.id !== S.eventId) { S.accessCode = e.code; S.accessPick = null; S.eventId = null; return go("access"); }
-    S.viewEventId = d.id === S.eventId ? null : d.id; S.stTab = "game"; go("standings"); },
-  addGame: async () => { const name = document.getElementById("gName").value.trim(); if (!name) { S.err = "ゲーム名を入力してください"; return render(true); }
-    const mult = Number(document.getElementById("gMult").value) || 1; const isFree = document.getElementById("gFree").checked; const id = uid();
-    await Store.update({ [`games/${id}`]: { name, mult, isFree, order: now() }, [`events/${S.eventId}/pool/${id}`]: true }); S.err = ""; toast(`${name} を追加しました`); render(true); },
-  delGame: async d => { const g = D().games?.[d.id]; if (!confirm(`「${g.name}」を候補から削除しますか？（遊び終わった記録は残ります）`)) return;
-    await Store.update({ [`games/${d.id}`]: null }); },
-  addMember: async () => { const el = document.getElementById("newMember2"); const name = el.value.trim(); if (!name) return;
-    await Store.update({ [`members/${uid()}`]: { name, order: now() } }); toast(`${name} を名簿に追加しました`); render(true); },
-  seed: async () => { await seedSample(); S.setup.title = document.getElementById("setupTitle").value; S.setup.games = gamesList().map(g => g.id); render(true); },
+  finishEvent: async () => { const e = curEv(); if (!confirm(`「${e.title}」を終了しますか？\n結果はグループの「記録」と「通算」に残ります。`)) return;
+    const eid = S.eventId;
+    await Store.update({ [`events/${eid}/status`]: "done", [`events/${eid}/endedAt`]: now(), [`groups/${S.groupId}/activeEvent`]: null, [`events/${eid}/updatedAt`]: now() });
+    S.eventId = null; S.viewEventId = eid; S.stTab = "rank"; S.view = "standings"; toast("大会を終了しました"); render(true); },
+  openEvent: d => { S.viewEventId = d.id; S.stTab = "rank"; S.view = "standings"; S.err = ""; window.scrollTo(0, 0); render(true); },
+  deleteEvent: async () => { const e = evOf(S.viewEventId); if (!confirm(`「${e.title}」を削除しますか？（元に戻せません）`)) return;
+    await Store.update({ [`events/${S.viewEventId}`]: null }); toast("大会を削除しました"); go("hub"); },
   recSel: d => { S.recMember = d.id; render(true); },
-  copyUrl: async () => { const v = document.getElementById("joinUrl").value; try { await navigator.clipboard.writeText(v); toast("リンクをコピーしました"); } catch { document.getElementById("joinUrl").select(); toast("選択したのでコピーしてください"); } }
+  copyUrl: async () => { const v = document.getElementById("joinUrl").value; try { await navigator.clipboard.writeText(v); toast("リンクをコピーしました"); } catch { document.getElementById("joinUrl").select(); toast("選択したのでコピーしてください"); } },
+  /* 過去の大会の登録 */
+  newImport: () => { const g = grp(); S.imp = { title: `第${groupEvents(S.groupId).length + 1}回大会`, date: isoDate(now()), players: groupMembers(g).slice(0, 6), text: "", rows: [] }; go("imp"); },
+  impPlayer: d => { const p = S.imp.players; const i = p.indexOf(d.id); if (i >= 0) p.splice(i, 1); else if (p.length < 6) p.push(d.id); S.imp.rows.forEach(r => { for (const k in r.ranks) if (!p.includes(k)) delete r.ranks[k]; }); render(true); },
+  impParse: () => {
+    const im = S.imp; if (im.players.length < 2) { S.err = "参加者を2人以上選んでください"; return render(true); }
+    const rows = parseImport(im.text, im.players.length);
+    if (!rows.length) { S.err = "読み取れる行がありませんでした。ゲーム名と数字の範囲をコピーしてください"; return render(true); }
+    im.rows = rows.map(r => ({ name: r.name, mult: r.mult, warn: r.warn, note: r.note, ranks: Object.fromEntries(im.players.map((p, i) => [p, r.rk[i]])) }));
+    S.err = ""; toast(`${rows.length}行を読み取りました`); render(true);
+  },
+  impAddRow: () => { const im = S.imp; if (im.players.length < 2) { S.err = "参加者を2人以上選んでください"; return render(true); }
+    im.rows.push({ name: "", mult: 1, ranks: Object.fromEntries(im.players.map((p, i) => [p, i + 1])) }); S.err = ""; render(true); },
+  impDelRow: d => { S.imp.rows.splice(Number(d.ri), 1); render(true); },
+  impSave: async () => {
+    const im = S.imp, g = grp(), ps = im.players;
+    if (ps.length < 2) { S.err = "参加者を2人以上選んでください"; return render(true); }
+    if (!im.rows.length) { S.err = "ゲームの行がありません"; return render(true); }
+    for (const [i, r] of im.rows.entries()) {
+      if (!r.name.trim()) { S.err = `${i + 1}行目のゲーム名が空です`; return render(true); }
+      const vals = ps.map(p => r.ranks[p] || 0); const m = vals.filter(v => v > 0).length;
+      if (m < 2) { S.err = `${i + 1}行目（${r.name}）は参加者が2人以上必要です`; return render(true); }
+      if (vals.some(v => v > m)) { S.err = `${i + 1}行目（${r.name}）は参加${m}人なので、順位は1〜${m}で選んでください`; return render(true); }
+    }
+    const start = new Date(im.date + "T12:00:00").getTime() || now();
+    const byName = Object.fromEntries(groupGames(g).map(x => [nameKey(x.name), x]));
+    const rounds = {};
+    im.rows.forEach((r, i) => { const hit = byName[nameKey(r.name)]; rounds[uid() + i] = { gameId: hit?.id || "", name: hit ? hit.name : r.name.trim(), mult: r.mult, ranks: Object.fromEntries(ps.map(p => [p, r.ranks[p] || 0])), at: start + i }; });
+    const id = uid();
+    await Store.update({ [`events/${id}`]: { groupId: S.groupId, title: im.title.trim() || "過去の大会", status: "done", imported: true, startedAt: start, endedAt: start, updatedAt: now(),
+      players: Object.fromEntries(ps.map((p, i) => [p, i])), pool: {}, rounds } });
+    toast("過去の大会を登録しました"); S.viewEventId = id; S.stTab = "rank"; S.view = "standings"; render(true);
+  }
 };
+const setByPath = (path, v) => { const [a, b] = path.split("."); S[a][b] = v; };
 const changes = {
   remember: el => { S.remember = el.checked; },
+  gnewSeed: el => { S.gnew.seed = el.checked; },
   setupGame: el => { const g = S.setup.games; const i = g.indexOf(el.dataset.id); if (el.checked && i < 0) g.push(el.dataset.id); if (!el.checked && i >= 0) g.splice(i, 1); render(true); },
   poolToggle: el => Store.update({ [`events/${S.eventId}/pool/${el.dataset.id}`]: el.checked ? true : null }),
-  mult: el => Store.update({ [`games/${el.dataset.id}/mult`]: Number(el.value) }),
-  renameMember: el => { const v = el.value.trim(); if (v) Store.update({ [`members/${el.dataset.id}/name`]: v }); }
+  mult: el => Store.update({ [`groups/${S.groupId}/games/${el.dataset.id}/mult`]: Number(el.value) }),
+  groupName: el => { const v = el.value.trim(); if (v) Store.update({ [`groups/${S.groupId}/name`]: v }); },
+  renameMember: el => { const v = el.value.trim(); if (v && v !== mname(el.dataset.id)) { Store.update({ [`members/${el.dataset.id}/name`]: v }); toast(`名前を「${v}」に変更しました`); } },
+  impMult: el => { S.imp.rows[Number(el.dataset.ri)].mult = Number(el.value); render(true); },
+  impRank: el => { const r = S.imp.rows[Number(el.dataset.ri)]; r.ranks[el.dataset.pid] = Number(el.value); r.warn = ""; render(true); }
 };
 document.addEventListener("click", ev => {
   const el = ev.target.closest("[data-act]"); if (!el || !app.contains(el)) return;
@@ -708,39 +939,59 @@ document.addEventListener("click", ev => {
 });
 document.addEventListener("change", ev => { const el = ev.target; if (el.dataset?.chg && changes[el.dataset.chg]) changes[el.dataset.chg](el); });
 document.addEventListener("input", ev => {
-  if (ev.target.id === "codeInput") {
-    const v = ev.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); const pos = ev.target.selectionStart;
+  const el = ev.target;
+  if (el.id === "codeInput") {
+    const v = el.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); const pos = el.selectionStart;
     if (v !== S.accessCode) { S.accessCode = v; S.accessPick = null; S.err = ""; renderQueued = false; render(true); const ni = document.getElementById("codeInput"); ni.focus(); ni.setSelectionRange(pos, pos); }
+    return;
   }
+  const p = el.dataset?.inp; if (!p) return;
+  if (p === "impName") { S.imp.rows[Number(el.dataset.ri)].name = el.value; return; }
+  setByPath(p, el.value);
 });
 document.addEventListener("keydown", ev => {
   if (ev.key !== "Enter") return; const id = ev.target.id;
-  const map = { freeName: "setFree", gName: "addGame", newMember: "addMemberSetup", newMember2: "addMember" };
+  const map = { freeName: "setFree", gName: "addGame", gnewMember: "gnewAdd", cfgMember: "addMember", codeInput: "enter" };
   if (map[id]) { ev.preventDefault(); actions[map[id]](); }
 });
 
+/* ---------------- 旧版データの移行（大会ごとのコード → グループ） ---------------- */
+async function migrate() {
+  const old = Object.entries(D().events || {}).filter(([, e]) => !e.groupId);
+  if (!old.length && !D().games) return;
+  const u = {}, groups = {}, byKey = {}, taken = {};
+  for (const [eid, e] of old) {
+    const ps = playersOf(e); const key = [...ps].sort().join(",");
+    let gid = byKey[key];
+    if (!gid) {
+      gid = uid() + Object.keys(byKey).length; byKey[key] = gid; const code = newCode(taken); taken[code] = 1;
+      groups[gid] = { name: `グループ${Object.keys(byKey).length}`, code, createdAt: now(), members: Object.fromEntries(ps.map((p, i) => [p, i])), games: D().games || {} };
+      u[`codes/${code}`] = gid;
+    }
+    u[`events/${eid}/groupId`] = gid;
+    if (e.status !== "done") { if (groups[gid].activeEvent) u[`events/${eid}/status`] = "done"; else groups[gid].activeEvent = eid; }
+    if (e.code) u[`codes/${e.code}`] = null;
+  }
+  for (const [gid, g] of Object.entries(groups)) u[`groups/${gid}`] = g;
+  u["games"] = null;
+  await Store.update(u);
+}
+
 /* ---------------- 起動 ---------------- */
 let booted = false;
-Store.onChange = () => {
+Store.onChange = async () => {
   if (!booted) {
     booted = true;
+    try { await migrate(); } catch (err) { console.error(err); }
     const q = new URLSearchParams(location.search).get("room");
     if (q) { S.accessCode = q.toUpperCase(); }
-    else if (pref.code && D().codes?.[pref.code] && evOf(D().codes[pref.code])?.players?.[pref.member] !== undefined) {
-      S.eventId = D().codes[pref.code]; S.me = pref.member; S.view = "menu";
+    else if (pref.code) {
+      const gid = D().codes?.[pref.code]; const g = gid && grpOf(gid);
+      if (g && g.members?.[pref.member] !== undefined) { enterGroup(gid, pref.member); return; }
     }
-    // 初回のお試しモードには見本データを入れる
-    if (Store.mode === "local" && !D().games) seedSample();
   }
   render();
 };
-async function seedSample() {
-  const names = ["ブラックジャック", "フリップ7", "ヤッツィー", "四麻（半荘）", "キャントストップ", "ラスベガス", "ハーツ（75点）", "インカの黄金", "ゴッドフィールド", "ニムト", "キャット・イン・ザ・ボックス", "キャッスルコンボ", "マインドアップ", "大富豪", "ラッキーナンバー", "ハゲタカのえじき"];
-  const u = {};
-  names.forEach((n, i) => u[`games/g${pad2(i + 1)}`] = { name: n, mult: n === "ゴッドフィールド" ? 2 : 1, isFree: false, order: i });
-  u["games/g99"] = { name: "自由枠", mult: 2, isFree: true, order: 99 };
-  return Store.update(u);
-}
 Store.init().catch(err => showFatal("起動に失敗しました：" + err.message));
 </script>
 </body>
