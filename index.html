@@ -55,7 +55,7 @@ input,select{font:inherit}
 .rk.on{background:var(--gold);color:var(--ink);border-color:var(--gold)}
 .rk.x{min-width:56px;font-size:12px;font-family:inherit}
 .rk.x.on{background:#555;color:#fff;border-color:#777}
-.ptile{text-align:left;padding:10px 12px;background:var(--row);border-left:4px solid transparent}
+.ptile{text-align:left;padding:10px 12px;background:var(--row);border-left:4px solid transparent;color:var(--text)}
 .ptile.on{background:var(--panel);color:var(--ink);border-left-color:var(--gold)}
 .ptile .n{font-size:18px;font-weight:600;margin:0}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -75,6 +75,13 @@ tr.click{cursor:pointer} tr.click:hover td{background:rgba(255,255,255,.04)}
 .you{font-size:10px;background:var(--blue);color:#fff;padding:0 4px;margin-left:6px;vertical-align:2px}
 .spin{display:inline-block;animation:sp .9s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
 .flash{animation:fl .12s linear}
+.av{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:2px solid;color:#fff;flex-shrink:0;overflow:hidden;font-weight:600;line-height:1;vertical-align:middle}
+.av img{width:100%;height:100%;object-fit:cover}
+.who{display:inline-flex;align-items:center;gap:6px;vertical-align:middle;min-width:0}
+.whon{display:inline-flex;flex-direction:column;line-height:1.2;min-width:0}
+.hdl{font-family:var(--mono);font-size:10px;color:#8A8D93;font-weight:400}
+.wp .hdl{color:#6B6E74}
+.swap{border:1px solid var(--line);color:#C4C7CC;padding:0 5px;font-size:10px}.swap:hover{border-color:var(--sub)}
 .rb{display:inline-block;min-width:38px;text-align:center;padding:1px 6px;font-size:12px;border:0;font-family:inherit;line-height:1.6}
 select.rb{appearance:none;-webkit-appearance:none;cursor:pointer;padding:2px 8px}
 .rb1{background:#F2C14E;color:#2A1E00}.rb2{background:#C4CBD6;color:#1E1F22}.rb3{background:#C98A55;color:#2A1600}.rbx{background:#4A4D53;color:#C4C7CC}.rb0{background:transparent;color:var(--dim);border:1px dashed #4A4D53}
@@ -186,6 +193,22 @@ const gameOf = (e, gameId) => grpOf(e?.groupId)?.games?.[gameId];
 const multBadge = m => (m && m > 1) ? `<span class="bdg">×${m}</span>` : "";
 const rbClass = r => r === 1 ? "rb1" : r === 2 ? "rb2" : r === 3 ? "rb3" : r > 0 ? "rbx" : "rb0";
 const rankBadge = (r, label, big) => `<span class="rb ${rbClass(r)}" style="${big ? "font-size:14px;padding:2px 10px" : ""}">${label ?? (r > 0 ? r + "位" : "不参加")}</span>`;
+const PALETTE = ["#E8590C", "#2E8FD8", "#2F9E44", "#AE3EC9", "#F2C14E", "#E64980", "#15AABF", "#868E96"];
+function colorOf(id) {
+  const m = D().members?.[id]; if (m?.color) return m.color;
+  const g = grp(); const idx = g ? groupMembers(g).indexOf(id) : -1;
+  const h = [...String(id)].reduce((a, c) => a + c.charCodeAt(0), 0);
+  return PALETTE[(idx >= 0 ? idx : h) % PALETTE.length];
+}
+const handleOf = id => D().members?.[id]?.handle || ("u" + String(id).slice(-3).toLowerCase());
+function avatar(id, size = 28) {
+  const m = D().members?.[id]; const c = colorOf(id);
+  const inner = m?.icon ? `<img src="${esc(m.icon)}" alt="">` : esc((m?.name || "?").slice(0, 1));
+  return `<span class="av" style="width:${size}px;height:${size}px;border-color:${c};background:${m?.icon ? "#3A3D42" : c};font-size:${Math.round(size * .45)}px">${inner}</span>`;
+}
+function who(id, size = 22, showHandle = true) {
+  return `<span class="who">${avatar(id, size)}<span class="whon">${esc(mname(id))}${showHandle ? `<span class="hdl">@${esc(handleOf(id))}</span>` : ""}</span></span>`;
+}
 const youTag = id => id === S.me ? '<span class="you">YOU</span>' : "";
 
 // 1ゲームの得点：参加人数Nのとき 順位r → (N - r + 1) × 倍率。同じ順位は同じ点。
@@ -233,7 +256,7 @@ function render(force) {
   const inEventViews = ["menu", "draw", "result", "link"];
   if (S.eventId && (!curEv() || curEv().status === "done")) { S.eventId = null; if (inEventViews.includes(S.view) || (S.view === "standings" && !S.viewEventId)) S.view = S.groupId ? "hub" : "access"; }
   const v = { access: viewAccess, gnew: viewGroupNew, hub: viewHub, gcfg: viewGroupCfg, games: viewGames, enew: viewEventNew,
-    menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport }[S.view] || viewAccess;
+    menu: viewMenu, draw: viewDraw, result: viewResult, standings: viewStandings, record: viewRecord, link: viewLink, imp: viewImport, prof: viewProfile }[S.view] || viewAccess;
   app.innerHTML = (Store.mode === "local" ? `<div class="banner">お試しモード：データはこの端末のブラウザだけに保存されます（Firebaseの設定を入れると全員で共有できます）</div>` : "") + v();
   afterRender();
 }
@@ -250,6 +273,7 @@ function header(tagText, back) {
     </div><div class="r">
       ${prog}
       <span class="mono dim">SYS.${fmtDateTime(now())}</span>
+      ${g && S.me && D().members?.[S.me] ? `<button data-act="openProf" title="プロフィール" style="display:flex;align-items:center;gap:6px">${avatar(S.me, 26)}<span class="mono dim">@${esc(handleOf(S.me))}</span></button>` : ""}
       ${g ? `<button class="ico" data-act="go" data-v="link" title="別の端末で入る" aria-label="別の端末で入る">▦</button>
              <button class="ico" data-act="logout" title="退室" aria-label="退室">⏻</button>` : ""}
     </div></div>`;
@@ -270,7 +294,7 @@ function viewAccess() {
     } else info = `<p class="err">このコードのグループは見つかりません</p>`;
   }
   const tiles = g ? groupMembers(g).map(id => `<button class="ptile ${S.accessPick === id ? "on" : ""}" data-act="pick" data-id="${id}">
-        <p class="mono capg" style="font-size:10px">${shortId(id)}</p><p class="n">${esc(mname(id))}</p></button>`).join("") : "";
+        <span class="n" style="font-size:16px">${who(id, 34)}</span></button>`).join("") : "";
   return `${header("入室 / ACCESS", null)}
   <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)">
     <div>
@@ -329,7 +353,7 @@ function viewHub() {
   if (act && act.status !== "done") {
     const st = standingsOf(act, roundsOf(act)); const lead = st.filter(x => x.rank === 1);
     actHtml = `<div style="background:var(--dark);border-left:3px solid var(--blue);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-      <div><p style="margin:0;font-size:17px">${esc(act.title)}</p><p class="muted" style="margin:0;font-size:13px">${roundsOf(act).length} / ${poolSize(act)} ゲーム　首位 ${lead.map(x => esc(mname(x.id))).join("・")} ${lead[0]?.pts ?? 0}pt</p></div>
+      <div><p style="margin:0;font-size:17px">${esc(act.title)}</p><p class="muted" style="margin:0;font-size:13px">${roundsOf(act).length} / ${poolSize(act)} ゲーム　首位 ${lead.map(x => who(x.id, 18, false)).join(" ")} ${lead[0]?.pts ?? 0}pt</p></div>
       <button class="btn" data-act="openActive">続きから</button></div>`;
   } else {
     actHtml = `<div style="background:var(--dark);border-left:3px solid var(--line);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -357,7 +381,7 @@ function viewHub() {
       <p class="cap">SQUAD RECORD（このグループの通算）</p>
       <div class="list">
         ${rec.map((x, i) => `<div class="${i === 0 && x.win > 0 ? "wp" : "row"}" style="display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:7px 10px;${i === 0 && x.win > 0 ? "border-left:4px solid var(--gold)" : ""}">
-          <span>${esc(mname(x.id))}${youTag(x.id)}${g.members?.[x.id] === undefined ? '<span class="dim" style="font-size:11px">（外れた）</span>' : ""}</span><span class="mono">優勝 ${x.win}</span><span class="mono">平均 ${x.ev ? Math.round(x.sum / x.ev) : "-"}</span></div>`).join("") || `<p class="muted" style="font-size:13px">終了した大会がまだありません</p>`}
+          <span>${who(x.id, 24)}${youTag(x.id)}${g.members?.[x.id] === undefined ? '<span class="dim" style="font-size:11px">（外れた）</span>' : ""}</span><span class="mono">優勝 ${x.win}</span><span class="mono">平均 ${x.ev ? Math.round(x.sum / x.ev) : "-"}</span></div>`).join("") || `<p class="muted" style="font-size:13px">終了した大会がまだありません</p>`}
       </div>
       <button class="btn2" style="margin-top:8px" data-act="go" data-v="record">通算成績・得意不得意を見る</button>
       <div class="tiles" style="margin-top:16px">
@@ -382,15 +406,16 @@ function viewGroupCfg() {
       <p class="muted" style="font-size:12px;margin-top:6px">このコードとリンクは大会が変わっても同じです。</p>
     </div>
     <div>
-      <p class="cap">MEMBERS（名前は直接書き換え・入力欄から離れると保存）</p>
+      <p class="cap">MEMBERS</p>
       <div class="list" style="gap:5px">
-        ${groupMembers(g).map(id => `<div class="row" style="padding:6px 10px">
-          <span class="mono dim" style="font-size:10px;width:48px">${shortId(id)}</span>
-          <input class="field" style="flex:1;padding:4px 8px" value="${esc(mname(id))}" data-chg="renameMember" data-id="${id}">
-          <button class="btn2" style="padding:3px 8px;font-size:12px" data-act="removeMember" data-id="${id}">外す</button></div>`).join("")}
+        ${groupMembers(g).map(id => `<div class="row" style="padding:6px 10px;border-left:4px solid ${colorOf(id)}">
+          <span style="display:flex;align-items:center;gap:6px">${who(id, 32)}${youTag(id)}</span>
+          <span style="display:flex;gap:6px">${id === S.me ? `<button class="btn2" style="padding:3px 8px;font-size:12px" data-act="openProf">プロフィール</button>` : ""}
+          <button class="btn2" style="padding:3px 8px;font-size:12px" data-act="removeMember" data-id="${id}">外す</button></span></div>`).join("")}
       </div>
+      ${dupWarn(groupMembers(g))}
       <div style="display:flex;gap:6px;margin-top:8px"><input class="field" id="cfgMember" placeholder="名前を追加（例：じろう）"><button class="btn2" data-act="addMember">追加</button></div>
-      <p class="muted" style="font-size:12px">名前を変えても過去の記録・通算はそのまま引き継がれます。外した人の過去の記録も残ります。</p>
+      <p class="muted" style="font-size:12px">名前・アイコン・色・@IDは、本人が右上の自分のアイコン（プロフィール）から変更します。名前を変えても過去の記録・通算は引き継がれ、外した人の過去の記録も残ります。</p>
       <p class="err">${esc(S.err)}</p>
     </div>
   </div>`;
@@ -428,7 +453,7 @@ function viewEventNew() {
       <input class="field" data-inp="setup.title" value="${esc(st.title)}">
       <p class="cap" style="margin-top:16px">PLAYERS（来られない人はタップで外す）</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        ${groupMembers(g).map(id => `<button class="ptile ${st.players.includes(id) ? "on" : ""}" data-act="setupPlayer" data-id="${id}"><p class="n" style="font-size:16px">${esc(mname(id))}</p></button>`).join("")}
+        ${groupMembers(g).map(id => `<button class="ptile ${st.players.includes(id) ? "on" : ""}" data-act="setupPlayer" data-id="${id}"><span class="n" style="font-size:15px">${who(id, 28)}</span></button>`).join("")}
       </div>
     </div>
     <div>
@@ -460,13 +485,13 @@ function viewMenu() {
           <text x="43" y="49" text-anchor="middle" font-size="30" fill="#EDEDED">1</text><text x="43" y="64" text-anchor="middle" font-size="9" fill="#A9ADB4">RANK</text></svg>
         <div>
           <p class="mono dim" style="margin:0;font-size:11px">${esc(e.title)} / LEADER</p>
-          <p style="font-size:21px;font-weight:600;margin:0">${leaders.map(x => esc(mname(x.id)) + youTag(x.id)).join("・")}</p>
+          <p style="font-size:21px;font-weight:600;margin:0">${leaders.map(x => who(x.id, 30) + youTag(x.id)).join(" ")}</p>
           <p class="muted" style="margin:0"><span class="mono" style="color:var(--text);font-size:18px">${leaders[0]?.pts ?? 0}</span> pt${second ? `　｜　2位と ${leaders[0].pts - second.pts} 点差` : ""}</p>
         </div>
       </div>
       <div style="background:var(--dark);border-left:3px solid var(--blue);padding:8px 12px"><p class="cap" style="margin:0">LATEST REPORT</p><p style="margin:2px 0 0">${latest}</p></div>
       <div class="list">
-        ${st.filter(x => x.rank > 1).map(x => `<div class="row rowcut"><span><span class="mono dim">${pad2(x.rank)}</span>　${esc(mname(x.id))}${youTag(x.id)}</span><span class="mono" style="margin-right:12px">${x.pts}</span></div>`).join("")}
+        ${st.filter(x => x.rank > 1).map(x => `<div class="row rowcut"><span style="display:flex;align-items:center;gap:10px"><span class="mono dim">${pad2(x.rank)}</span>${who(x.id, 24)}${youTag(x.id)}</span><span class="mono" style="margin-right:12px">${x.pts}</span></div>`).join("")}
       </div>
     </div>
     <div class="tiles">
@@ -554,7 +579,7 @@ function viewResult() {
   <p class="mono dim" style="margin:-6px 0 12px">OP ${esc(target.name)} ×${target.mult || 1}</p>
   <div class="grid2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
     <div class="list" style="gap:6px">
-      ${ps.map(id => `<div class="row rowcut" style="flex-wrap:wrap"><span><span class="mono dim" style="font-size:11px">${shortId(id)}</span>　${esc(mname(id))}${youTag(id)}</span>
+      ${ps.map(id => `<div class="row rowcut" style="flex-wrap:wrap"><span>${who(id, 28)}${youTag(id)}</span>
         <span style="display:flex;gap:4px;margin-right:10px">${Array.from({ length: n }, (_, i) => `<button class="rk ${dr[id] === i + 1 ? "on" : ""}" data-act="rank" data-id="${id}" data-r="${i + 1}">${i + 1}</button>`).join("")}
         <button class="rk x ${dr[id] === 0 ? "on" : ""}" data-act="rank" data-id="${id}" data-r="0">不参加</button></span></div>`).join("")}
       <p class="muted" style="font-size:12px;margin:4px 0 0">同じ順位は重ねて選べます。抜けた人は「不参加」にすると、残りの人数で点数を計算します。</p>
@@ -563,7 +588,7 @@ function viewResult() {
       <div class="wp top-o" style="padding:12px 14px">
         <p class="capg">SCORE PREVIEW（${parts}人参加）</p>
         <div class="mono" style="font-size:15px;line-height:1.9;margin-top:4px">
-          ${ps.filter(id => dr[id] > 0).sort((a, b) => prev[b] - prev[a]).map(id => `<div>${esc(mname(id))}<span style="float:right">+${prev[id]}</span></div>`).join("") || `<span style="color:#8A8D93">順位を選ぶと表示されます</span>`}
+          ${ps.filter(id => dr[id] > 0).sort((a, b) => prev[b] - prev[a]).map(id => `<div style="display:flex;justify-content:space-between;align-items:center">${who(id, 20, false)}<span>+${prev[id]}</span></div>`).join("") || `<span style="color:#8A8D93">順位を選ぶと表示されます</span>`}
         </div>
       </div>
       <button class="btn" data-act="submitResult" style="margin-top:10px;width:100%;justify-content:center">${S.editRound ? "修正を保存" : "確定 / SUBMIT"}</button>
@@ -585,7 +610,7 @@ function viewStandings() {
   const cards = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">
     ${st.map(x => `<div class="card ${x.rank === 1 ? "first" : ""}" style="${x.rank === 2 ? "border-top-color:#8DA2C0" : ""}">
       <p style="margin:0">${rankBadge(x.rank, ro && x.rank === 1 ? "優勝" : undefined)} ${!ro && x.move > 0 ? `<span style="color:var(--green)">▲${x.move}</span>` : !ro && x.move < 0 ? `<span style="color:#F27C7C">▼${-x.move}</span>` : ""}</p>
-      <p style="font-size:16px;margin:2px 0">${esc(mname(x.id))}${youTag(x.id)}</p><p class="big">${x.pts}</p></div>`).join("")}</div>`;
+      <p style="font-size:15px;margin:6px 0 2px">${who(x.id, 26)}${youTag(x.id)}</p><p class="big">${x.pts}</p></div>`).join("")}</div>`;
   const editable = !ro || e.status === "done";
   const list = S.stTab === "rank" ? [...rs].reverse().slice(0, 3) : [...rs].reverse();
   const rows = list.map((r, i) => {
@@ -594,7 +619,7 @@ function viewStandings() {
       ${ps.map(pid => `<td style="white-space:nowrap">${r.ranks?.[pid] > 0 ? `${rankBadge(r.ranks[pid])} <span class="mono dim" style="font-size:11px">${p[pid]}</span>` : '<span class="dim">-</span>'}</td>`).join("")}</tr>`;
   }).join("");
   const table = `<p class="cap" style="margin-top:16px">${S.stTab === "rank" ? "LATEST 3" : "OPERATION LOG"}<span class="dim" style="letter-spacing:0">　行をタップで修正</span></p>
-    <div style="overflow-x:auto"><table><tr><th style="width:42px">#</th><th>ゲーム</th>${ps.map(pid => `<th>${esc(mname(pid))}</th>`).join("")}</tr>${rows || `<tr><td colspan="${ps.length + 2}" class="muted">まだ結果がありません</td></tr>`}
+    <div style="overflow-x:auto"><table><tr><th style="width:42px">#</th><th>ゲーム</th>${ps.map(pid => `<th style="color:var(--text);font-size:13px">${who(pid, 20)}</th>`).join("")}</tr>${rows || `<tr><td colspan="${ps.length + 2}" class="muted">まだ結果がありません</td></tr>`}
     ${S.stTab === "game" ? `<tr><td></td><td style="color:#8A8D93">合計点</td>${ps.map(pid => { const x = st.find(y => y.id === pid); return `<td class="mono" style="font-size:16px;${x?.rank === 1 ? "color:var(--gold)" : ""}">${x?.pts ?? 0}</td>`; }).join("")}</tr>
       <tr><td></td><td style="color:#8A8D93">${ro ? "最終順位" : "現在の順位"}</td>${ps.map(pid => { const x = st.find(y => y.id === pid); return `<td>${rankBadge(x.rank, ro && x.rank === 1 ? "優勝" : undefined, true)}</td>`; }).join("")}</tr>` : ""}</table></div>`;
   return `${header(ro ? `記録 / ${esc(e.title)}` : "集計 / STANDINGS", ro ? "hub" : "menu")}
@@ -633,12 +658,12 @@ function viewRecord() {
       <p class="cap">PLAYER STATUS（タップで得意・不得意を表示）</p>
       <div class="list">
         ${order.map(s => { const on = s.id === sel;
-          return `<button class="${on ? "wp" : "row"}" data-act="recSel" data-id="${s.id}" style="display:grid;grid-template-columns:1fr auto auto auto;gap:12px;padding:8px 12px;text-align:left;${on ? "border-left:4px solid var(--gold)" : ""}">
-            <span>${esc(mname(s.id))}${youTag(s.id)}${inG.has(s.id) ? "" : '<span class="dim" style="font-size:11px">（外れたメンバー）</span>'}</span><span class="mono">参加 ${s.ev}</span><span class="mono">優勝 ${s.win}</span><span class="mono">平均 ${s.ev ? Math.round(s.sum / s.ev) : "-"}</span></button>`; }).join("") || `<p class="muted">メンバーがいません</p>`}
+          return `<button class="${on ? "wp" : "row"}" data-act="recSel" data-id="${s.id}" style="display:grid;grid-template-columns:1fr auto auto auto;gap:12px;padding:8px 12px;text-align:left;align-items:center;${on ? "border-left:4px solid var(--gold)" : ""}">
+            <span>${who(s.id, 26)}${youTag(s.id)}${inG.has(s.id) ? "" : '<span class="dim" style="font-size:11px">（外れたメンバー）</span>'}</span><span class="mono">参加 ${s.ev}</span><span class="mono">優勝 ${s.win}</span><span class="mono">平均 ${s.ev ? Math.round(s.sum / s.ev) : "-"}</span></button>`; }).join("") || `<p class="muted">メンバーがいません</p>`}
       </div>
     </div>
     <div>
-      <p class="cap">${esc(sel ? mname(sel) : "")} / GAME APTITUDE</p>
+      <p class="cap" style="display:flex;align-items:center;gap:6px">${sel ? who(sel, 22) : ""} / GAME APTITUDE</p>
       <div style="display:flex;flex-direction:column;gap:8px;font-size:14px">
         ${apt.map(a => `<div><div style="display:flex;justify-content:space-between"><span>${esc(a.name)} <span class="dim" style="font-size:11px">${a.n}回</span></span><span class="mono" style="color:${col(a.v)}">${rankLetter(a.v)}</span></div>
           <div class="bar"><div style="width:${Math.max(4, Math.round(a.v * 100))}%;background:${col(a.v)}"></div></div></div>`).join("") || `<p class="muted">まだデータがありません</p>`}
@@ -682,7 +707,7 @@ function viewImport() {
       <p class="cap" style="margin-top:14px">PLAYERS（Excelの列の順にタップ）</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
         ${groupMembers(g).map(id => { const i = ps.indexOf(id); return `<button class="ptile ${i >= 0 ? "on" : ""}" style="padding:6px 10px" data-act="impPlayer" data-id="${id}">
-          <span class="mono" style="font-size:11px;color:#8A8D93">${i >= 0 ? `列${i + 1}` : "―"}</span> ${esc(mname(id))}</button>`; }).join("")}
+          <span style="display:flex;align-items:center;gap:6px"><span class="mono" style="font-size:11px;color:#8A8D93">${i >= 0 ? `列${i + 1}` : "―"}</span>${who(id, 22)}</span></button>`; }).join("")}
       </div>
       <p class="cap" style="margin-top:14px">NUMBERS（Excelの数字の意味）</p>
       <div style="display:flex">
@@ -697,7 +722,11 @@ function viewImport() {
     <div>
       <p class="cap">PREVIEW（${rows.length}ゲーム）</p>
       ${rows.length ? `<div style="overflow-x:auto"><table class="imp">
-        <tr><th style="min-width:130px">ゲーム</th><th>候補</th><th>倍率</th>${ps.map(p => `<th>${esc(mname(p))}</th>`).join("")}<th></th></tr>
+        <tr><th style="min-width:130px">ゲーム</th><th>候補</th><th>倍率</th>${ps.map((p, ci) => `<th style="min-width:140px;vertical-align:bottom">
+          <div style="font-size:10px;color:#8A8D93;display:flex;gap:4px;align-items:center">${ci > 0 ? `<button class="swap" data-act="impSwap" data-a="${ci}" data-b="${ci - 1}" title="左の列と入れ替え">◀</button>` : ""}列${ci + 1}${ci < n - 1 ? `<button class="swap" data-act="impSwap" data-a="${ci}" data-b="${ci + 1}" title="右の列と入れ替え">▶</button>` : ""}</div>
+          <div style="display:flex;align-items:center;gap:4px;margin-top:2px">${avatar(p, 20)}<select class="field" style="padding:3px 4px;font-size:12px;border-color:${colorOf(p)}" data-chg="impCol" data-ci="${ci}">
+            ${groupMembers(g).concat(ps.filter(x => !groupMembers(g).includes(x))).map(id => { const j = ps.indexOf(id); return `<option value="${id}" ${id === p ? "selected" : ""}>${esc(mname(id))} @${esc(handleOf(id))}${j >= 0 && j !== ci ? `（列${j + 1}と入れ替え）` : j < 0 ? "（未使用）" : ""}</option>`; }).join("")}
+          </select></div></th>`).join("")}<th></th></tr>
         ${rows.map((r, ri) => `<tr style="${r.warn ? "background:rgba(200,70,60,.15)" : ""}">
           <td><div style="display:flex;align-items:center;gap:4px"><input class="field" style="padding:3px 6px" value="${esc(r.name)}" data-inp="impName" data-ri="${ri}">${isNew(r) ? '<span class="bdg" style="margin:0">NEW</span>' : ""}</div>
             ${r.warn ? `<div style="font-size:10px;color:#F27C7C">${esc(r.warn)}</div>` : r.note ? `<div style="font-size:10px;color:var(--sub)">${esc(r.note)}</div>` : ""}</td>
@@ -750,6 +779,62 @@ function parseImport(text, n, mode) {
       note: isFree ? "自由枠：実際に遊んだゲーム名に書き換えできます" : k > 1 ? `${k}倍を検出（${vals.join("・")} を${k}で割って変換）` : "" });
   }
   return { rows, totals };
+}
+
+/* ----- プロフィール（本人だけ） ----- */
+function dupWarn(ids) {
+  const cnt = {}; ids.forEach(id => { const n = mname(id); cnt[n] = (cnt[n] || 0) + 1; });
+  const d = Object.keys(cnt).filter(n => cnt[n] > 1);
+  return d.length ? `<p style="color:var(--gold);font-size:12px;margin:6px 0 0">⚠ ${d.map(n => `「${esc(n)}」が${cnt[n]}人`).join("、")}います。色と@IDで見分けられますが、名前を変えるとさらにわかりやすくなります</p>` : "";
+}
+function viewProfile() {
+  const pr = S.prof; const g = grp();
+  const prevIcon = pr.icon ? `<img src="${esc(pr.icon)}" alt="">` : esc((pr.name || "?").slice(0, 1));
+  const same = groupMembers(g).filter(id => id !== S.me && mname(id) === pr.name.trim());
+  return `${header("プロフィール / PROFILE", S.eventId ? "menu" : "hub")}
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:24px;align-items:start" class="linkgrid">
+    <div style="text-align:center">
+      <span class="av" style="width:120px;height:120px;border-width:4px;border-color:${pr.color};background:${pr.icon ? "#3A3D42" : pr.color};font-size:48px">${prevIcon}</span>
+      <div style="display:flex;gap:6px;justify-content:center;margin-top:10px">
+        <label class="btn" style="font-size:13px;padding:6px 12px;cursor:pointer">画像を選ぶ<input type="file" accept="image/*" data-chg="profIcon" style="display:none"></label>
+        ${pr.icon ? `<button class="btn2" style="font-size:12px;padding:5px 10px" data-act="profIconClear">外す</button>` : ""}
+      </div>
+      <p class="dim" style="font-size:11px;margin:6px 0 0">自動で正方形に切り抜いて小さくします</p>
+    </div>
+    <div style="max-width:460px">
+      <div class="stripe"></div>
+      <p class="cap" style="margin-top:10px">NAME</p>
+      <input class="field" data-inp="prof.name" value="${esc(pr.name)}" maxlength="20">
+      ${same.length ? `<p style="color:var(--gold);font-size:12px;margin:4px 0 0">⚠ 同じ名前の人がグループにいます（色と@IDで見分けられます）</p>` : ""}
+      <p class="cap" style="margin-top:12px">ID（半角英数字と _ ・2〜12文字。空欄なら自動）</p>
+      <div style="display:flex;align-items:center;gap:4px"><span class="mono muted">@</span><input class="field mono" data-inp="prof.handle" value="${esc(pr.handle)}" maxlength="12" placeholder="${esc(handleOf(S.me))}"></div>
+      <p class="cap" style="margin-top:12px">COLOR</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${PALETTE.map(c => `<button data-act="profColor" data-c="${c}" aria-label="色 ${c}" style="width:26px;height:26px;border-radius:50%;background:${c};${pr.color === c ? "outline:2px solid #fff;outline-offset:2px" : ""}"></button>`).join("")}
+      </div>
+      <div style="margin-top:18px"><button class="btn" data-act="profSave">保存</button><p class="err">${esc(S.err)}</p></div>
+    </div>
+  </div>`;
+}
+function resizeIcon(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onerror = () => rej(new Error("画像を読み込めませんでした"));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => rej(new Error("この画像は使えません"));
+      img.onload = () => {
+        const size = 96, cv = document.createElement("canvas"); cv.width = cv.height = size;
+        const s0 = Math.min(img.width, img.height), sx = (img.width - s0) / 2, sy = (img.height - s0) / 2;
+        const ctx = cv.getContext("2d"); ctx.fillStyle = "#3A3D42"; ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, sx, sy, s0, s0, 0, 0, size, size);
+        let url = cv.toDataURL("image/jpeg", .82); if (url.length > 15000) url = cv.toDataURL("image/jpeg", .6);
+        res(url);
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
 }
 
 /* ----- 別の端末で入る ----- */
@@ -829,7 +914,7 @@ const actions = {
     const st = S.gnew; if (!st.name.trim()) { S.err = "グループ名を入力してください"; return render(true); }
     if (st.members.length < 2) { S.err = "メンバーを2人以上追加してください"; return render(true); }
     const gid = uid(), code = newCode(), u = {}, mem = {};
-    st.members.forEach((n, i) => { const id = uid() + i; u[`members/${id}`] = { name: n, order: now() + i }; mem[id] = i; });
+    st.members.forEach((n, i) => { const id = uid() + i; u[`members/${id}`] = { name: n, order: now() + i, color: PALETTE[i % PALETTE.length] }; mem[id] = i; });
     u[`groups/${gid}`] = { name: st.name.trim(), code, createdAt: now(), members: mem, games: st.seed ? sampleGames() : {} };
     u[`codes/${code}`] = gid;
     await Store.update(u);
@@ -838,7 +923,8 @@ const actions = {
   /* グループ設定 */
   addMember: async () => { const el = document.getElementById("cfgMember"); const v = el.value.trim(); if (!v) return; const id = uid();
     const ord = Math.max(-1, ...Object.values(grp().members || {})) + 1;
-    await Store.update({ [`members/${id}`]: { name: v, order: now() }, [`groups/${S.groupId}/members/${id}`]: ord }); toast(`${v} を追加しました`); render(true); },
+    const used = new Set(groupMembers(grp()).map(colorOf)); const color = PALETTE.find(c => !used.has(c)) || PALETTE[ord % PALETTE.length];
+    await Store.update({ [`members/${id}`]: { name: v, order: now(), color }, [`groups/${S.groupId}/members/${id}`]: ord }); toast(`${v} を追加しました`); render(true); },
   removeMember: async d => { if (groupMembers(grp()).length <= 2) { S.err = "メンバーは2人以上必要です"; return render(true); }
     if (!confirm(`${mname(d.id)} をグループから外しますか？\n（過去の記録は残ります）`)) return;
     await Store.update({ [`groups/${S.groupId}/members/${d.id}`]: null }); toast(`${mname(d.id)} を外しました`); },
@@ -924,6 +1010,18 @@ const actions = {
   openEvent: d => { S.viewEventId = d.id; S.stTab = "rank"; S.view = "standings"; S.err = ""; window.scrollTo(0, 0); render(true); },
   deleteEvent: async () => { const e = evOf(S.viewEventId); if (!confirm(`「${e.title}」を削除しますか？（元に戻せません）`)) return;
     await Store.update({ [`events/${S.viewEventId}`]: null }); toast("大会を削除しました"); go("hub"); },
+  openProf: () => { const m = D().members?.[S.me]; if (!m) return; S.prof = { name: m.name, handle: m.handle || "", color: colorOf(S.me), icon: m.icon || null }; go("prof"); },
+  profColor: d => { S.prof.color = d.c; render(true); },
+  profIconClear: () => { S.prof.icon = null; render(true); },
+  profSave: async () => {
+    const pr = S.prof; const name = pr.name.trim(); const h = pr.handle.trim();
+    if (!name) { S.err = "名前を入力してください"; return render(true); }
+    if (h && !/^[A-Za-z0-9_]{2,12}$/.test(h)) { S.err = "IDは半角英数字と _ で2〜12文字にしてください"; return render(true); }
+    if (h && Object.keys(D().members || {}).some(id => id !== S.me && handleOf(id).toLowerCase() === h.toLowerCase())) { S.err = `@${h} はほかの人が使っています`; return render(true); }
+    await Store.update({ [`members/${S.me}/name`]: name, [`members/${S.me}/handle`]: h || null, [`members/${S.me}/color`]: pr.color, [`members/${S.me}/icon`]: pr.icon || null });
+    toast("プロフィールを保存しました"); go(S.eventId ? "menu" : "hub");
+  },
+  impSwap: d => { impReassign(Number(d.a), S.imp.players[Number(d.b)]); render(true); },
   recSel: d => { S.recMember = d.id; render(true); },
   copyUrl: async () => { const v = document.getElementById("joinUrl").value; try { await navigator.clipboard.writeText(v); toast("リンクをコピーしました"); } catch { document.getElementById("joinUrl").select(); toast("選択したのでコピーしてください"); } },
   /* 過去の大会の登録 */
@@ -966,6 +1064,12 @@ const actions = {
     toast("過去の大会を登録しました"); S.viewEventId = id; S.stTab = "rank"; S.view = "standings"; render(true);
   }
 };
+function impReassign(ci, newId) {
+  const im = S.imp, ps = im.players, old = ps[ci]; if (!newId || old === newId) return;
+  const cj = ps.indexOf(newId);
+  im.rows.forEach(r => { const a = r.ranks[old]; if (cj >= 0) { const b = r.ranks[newId]; r.ranks[newId] = a; r.ranks[old] = b; } else { r.ranks[newId] = a; delete r.ranks[old]; } });
+  if (cj >= 0) { ps[ci] = newId; ps[cj] = old; } else ps[ci] = newId;
+}
 const setByPath = (path, v) => { const [a, b] = path.split("."); S[a][b] = v; };
 const changes = {
   remember: el => { S.remember = el.checked; },
@@ -977,6 +1081,8 @@ const changes = {
   renameMember: el => { const v = el.value.trim(); if (v && v !== mname(el.dataset.id)) { Store.update({ [`members/${el.dataset.id}/name`]: v }); toast(`名前を「${v}」に変更しました`); } },
   impMult: el => { S.imp.rows[Number(el.dataset.ri)].mult = Number(el.value); render(true); },
   impRank: el => { const r = S.imp.rows[Number(el.dataset.ri)]; r.ranks[el.dataset.pid] = Number(el.value); r.warn = ""; render(true); },
+  impCol: el => { impReassign(Number(el.dataset.ci), el.value); render(true); },
+  profIcon: async el => { const f = el.files?.[0]; if (!f) return; try { S.prof.icon = await resizeIcon(f); S.err = ""; } catch (e) { S.err = e.message; } render(true); },
   impCand: el => { S.imp.rows[Number(el.dataset.ri)].addCand = el.checked; render(true); }
 };
 document.addEventListener("click", ev => {
