@@ -110,6 +110,15 @@ table.log td.wincell .pts{color:var(--gold)}
 .wheelbox{position:relative;flex-shrink:0}
 .wheelbox .pointer{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-top:22px solid var(--panel);filter:drop-shadow(0 1px 0 #000)}
 #wheel{transform-origin:0 0}
+.roundbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:var(--dark);border-left:4px solid var(--gold);padding:10px 14px;margin-bottom:14px}
+.rb-no{display:flex;align-items:baseline;gap:8px}
+.rb-no .lbl{font-size:13px;color:var(--sub);letter-spacing:3px}.rb-no .num{font-size:48px;line-height:1;color:var(--gold)}.rb-no .tot{font-size:20px;color:var(--dim)}
+.rb-cells{display:flex;gap:4px;flex:1;min-width:240px}
+.rb-cell{flex:1;min-width:0;height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;line-height:1.1;background:#36393E;color:var(--text);font-family:var(--mono);white-space:nowrap;overflow:hidden}
+.rb-cell.d{background:#4A4D53;color:var(--sub)}.rb-cell.m2{background:var(--red);color:#fff}.rb-cell.m3{background:#8E1F17;color:#fff}
+.rb-cell b{font-weight:600}
+.rb-cell.now{outline:3px solid var(--panel);outline-offset:-2px}
+.tile.off{opacity:.55}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;margin-top:12px}
 .rcell{padding:8px 6px;text-align:center;background:var(--row);color:var(--text);border:2px solid transparent}
 .rcell.m2{background:var(--red);color:#fff}.rcell.m3{background:#8E1F17;color:#fff}
@@ -760,6 +769,20 @@ function roundStrip(e) {
     return `<span class="${played[i] ? "d" : ""} ${k === now ? "now" : ""} ${m > 1 ? "x" : ""}">R${k}${played[i] ? "✓" : m > 1 ? ` ×${m}` : ""}</span>`; }).join("")}</div>`;
 }
 
+function roundBar(e, editBtn) {
+  const played = roundsOf(e); const n = roundTotal(e); const now = played.length + 1; const allDone = played.length >= n;
+  const m = curMult(e);
+  const cells = Array.from({ length: n }, (_, i) => { const k = i + 1; const d = played[i];
+    const mm = d ? (d.mult || 1) : hasRounds(e) ? roundMult(e, k) : 1;
+    const cls = d ? "d" : `m${mm}${k === now ? " now" : ""}`;
+    return `<span class="rb-cell ${cls}">${k === now && !d ? `<b>NOW</b>${mm > 1 ? `×${mm}` : ""}` : `<b>${k}${d ? "✓" : ""}</b>${!d && mm > 1 ? `×${mm}` : ""}`}</span>`; }).join("");
+  return `<div class="roundbar">
+    <div class="rb-no"><span class="mono lbl">ROUND</span><span class="mono num">${allDone ? "--" : pad2(now)}</span><span class="mono tot">/ ${pad2(n)}</span>
+      ${allDone ? `<span class="muted" style="font-size:13px;margin-left:6px">全ラウンド終了</span>` : `<span class="mtag ${m > 1 ? "x" : ""}">×${m}</span>`}</div>
+    <div class="rb-cells">${cells}</div>
+    ${editBtn && hasRounds(e) ? `<button class="btn2" style="font-size:12px;padding:3px 10px" data-act="go" data-v="rounds">倍率・ラウンド数を変更</button>` : ""}</div>`;
+}
+
 /* ----- メニュー ----- */
 function viewMenu() {
   const e = curEv(); const st = withMoves(e); const rs = roundsOf(e); const last = rs[rs.length - 1];
@@ -768,7 +791,10 @@ function viewMenu() {
   const circ = 2 * Math.PI * 36; const second = st.find(x => x.rank > 1); const cur = e.current;
   let latest = "まだ結果がありません";
   if (last) { const p = roundPoints(last); const best = Math.max(...Object.values(p)); const w = Object.keys(p).filter(k => p[k] === best).map(mname).join("・"); latest = `${esc(last.name)}　${esc(w)}が1位`; }
+  const allDone = hasRounds(e) && rs.length >= e.roundCount;
+  const curG = cur ? grp()?.games?.[cur.gameId] : null;
   return `${header(`<span class="mono">${esc(SITE_NAME)}</span>`, "hub")}
+  ${roundBar(e, false)}
   <div class="grid2">
     <div style="display:flex;flex-direction:column;gap:12px">
       <div class="stripe"></div>
@@ -788,14 +814,13 @@ function viewMenu() {
       </div>
     </div>
     <div class="tiles">
-      <button class="span6 wp cut top-o" data-act="go" data-v="draw" style="text-align:left;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
-        <div><p class="capg">NEXT OPERATION</p>
-          <p style="font-size:26px;font-weight:600;margin:0">${cur ? (cur.name ? esc(cur.name) : "自由枠（ゲーム選択待ち）") : "未抽選"}</p>
-          ${hasRounds(e) && rs.length >= e.roundCount ? `<span class="dim" style="font-size:13px">全ラウンド終了 → 集計で大会を終了</span>` : `<span style="background:${curMult(e) > 1 ? "var(--red)" : "var(--ink)"};color:#fff;font-size:12px;padding:1px 8px">ROUND ${rs.length + 1}　倍率 ×${curMult(e)}</span>${cur ? "" : ` <span class="dim" style="font-size:13px">タップして抽選</span>`}`}</div>
-        <div style="text-align:right"><p class="mono" style="font-size:44px;margin:0;line-height:1">${pad2(rs.length + 1)}</p><p class="dim" style="font-size:12px;margin:0">/ ${pad2(total)}</p></div>
+      <button class="span6 wp cut top-o" data-act="${allDone ? "go" : "go"}" data-v="${allDone ? "standings" : "draw"}" style="text-align:left;padding:14px 18px">
+        <span style="display:flex;justify-content:space-between;align-items:center"><span class="capg">ROUND ${allDone ? "--" : pad2(rs.length + 1)} / ${pad2(total)}</span>${allDone ? "" : `<span style="background:${curMult(e) > 1 ? "var(--red)" : "var(--ink)"};color:#fff;font-size:12px;padding:1px 8px">×${curMult(e)}</span>`}</span>
+        ${allDone ? `<span style="display:block;font-size:22px;font-weight:600;margin-top:6px">全ラウンド終了</span><span style="display:block;font-size:13px;color:var(--blue)">→ タップして集計（大会を終了する）</span>`
+          : cur ? `<span style="display:flex;align-items:center;gap:10px;margin-top:6px">${curG ? gameIcon(curG, 34) : ""}<span style="font-size:24px;font-weight:600">${cur.name ? esc(cur.name) : "自由枠（ゲーム選択待ち）"}</span></span><span style="display:block;font-size:13px;color:#6B6E74">タップでルーレット画面（引き直し・遊ぶページ）</span>`
+          : `<span style="display:block;font-size:22px;font-weight:600;margin-top:6px">まだ決まっていません</span><span style="display:block;font-size:13px;color:var(--blue)">⟳ タップしてルーレットへ</span>`}
       </button>
-      <button class="tile wp span3" data-act="go" data-v="draw"><div><p class="t">抽選</p><p class="capg">DRAW</p></div><span style="font-size:26px;color:#C9CACC">⚄</span></button>
-      <button class="tile wp span3" data-act="openResult"><div><p class="t">結果入力</p><p class="capg">RESULT</p></div><span style="font-size:26px;color:#C9CACC">✎</span></button>
+      <button class="tile wp span6 ${cur && cur.name ? "" : "off"}" data-act="openResult" style="${cur && cur.name ? "border-left:4px solid var(--blue)" : ""}"><div><p class="t">結果入力</p><p class="capg">RESULT</p></div><span style="font-size:${cur && cur.name ? "24px;color:var(--blue)" : "12px;color:#8A8D93"}">${cur && cur.name ? "✎" : "ゲームが決まると押せます"}</span></button>
       <button class="span6" data-act="go" data-v="standings" style="display:grid;grid-template-columns:1fr 1.5fr;text-align:left">
         <div style="background:var(--blue);color:#fff;padding:14px;clip-path:polygon(0 0,100% 0,100% 100%,6% 100%,0 80%)"><span style="font-size:24px;font-weight:600">集計</span></div>
         <div style="display:flex;flex-direction:column">
@@ -830,8 +855,7 @@ function viewDraw() {
   const allDone = hasRounds(e) && roundsOf(e).length >= e.roundCount;
   const m = curMult(e);
   return `${header("抽選 / DRAW", "menu")}
-  ${hasRounds(e) ? `<div class="roundhd"><span class="mono lbl">ROUND</span><span class="mono num">${allDone ? "--" : pad2(roundNo(e))}</span><span class="mono dim">/ ${pad2(e.roundCount)}</span>
-    ${allDone ? `<span class="muted">全ラウンド終了</span>` : `<span class="mtag ${m > 1 ? "x" : ""}">×${m}</span>`}<button class="btn2" style="font-size:12px;padding:2px 10px" data-act="go" data-v="rounds">倍率・ラウンド数を変更</button></div>${roundStrip(e)}` : ""}
+  ${roundBar(e, true)}
   <div class="grid2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
     <div>
       <div class="stripe"></div>
